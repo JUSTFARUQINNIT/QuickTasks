@@ -2,6 +2,7 @@ import 'dotenv/config'
 import cors from 'cors'
 import express from 'express'
 import nodemailer from 'nodemailer'
+import cron from 'node-cron'
 import { createClient } from '@supabase/supabase-js'
 
 const PORT = Number(process.env.PORT ?? 8787)
@@ -280,8 +281,12 @@ app.post('/api/reminders/send-daily', async (req, res) => {
 app.listen(PORT, () => {
   console.log(`[QuickTasks server] listening on ${PORT}`)
 
-  // Optional: fire-and-forget daily reminders once on server start.
-  // In production, prefer calling /api/reminders/send-daily from an external cron.
-  void sendDailyReminderEmails()
+  // Send daily reminder emails every day at 8:00 AM (server local time).
+  // Set TZ env var if you need a specific timezone (e.g. TZ=America/New_York).
+  cron.schedule('0 8 * * *', () => {
+    console.log('[QuickTasks server] Running scheduled 8am reminder job...')
+    void sendDailyReminderEmails()
+  })
+  console.log('[QuickTasks server] Daily 8am email reminders scheduled')
 })
 
