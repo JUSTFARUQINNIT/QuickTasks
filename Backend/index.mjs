@@ -34,16 +34,44 @@ const mailTransport =
 
 const app = express()
 app.use(express.json())
-app.use(
-  cors({
-    origin: [APP_URL, 'https://quick-tasks-eight.vercel.app/'],
-  }),
-)
+
+// ======================
+// CORS CONFIGURATION
+// ======================
+const allowedOrigins = [APP_URL, 'https://quick-tasks-eight.vercel.app/']
+app.use(cors({
+  origin: function (origin, callback) {
+    if (!origin) return callback(null, true) // allow non-browser clients
+    if (allowedOrigins.indexOf(origin) === -1) {
+      return callback(new Error(`CORS policy: origin ${origin} not allowed`), false)
+    }
+    return callback(null, true)
+  },
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  credentials: true
+}))
+
+// Handle preflight OPTIONS requests
+app.options('*', cors({
+  origin: allowedOrigins,
+  methods: ['GET','POST','PUT','DELETE','OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  credentials: true
+}))
+
+// ======================
+// HEALTH CHECK
+// ======================
 
 app.get('/health', (_req, res) => {
   res.json({ ok: true })
 })
 
+
+// ======================
+// PASSWORD RESET
+// ======================
 app.post('/api/auth/request-password-reset', async (req, res) => {
   try {
     const email = String(req.body?.email ?? '').trim().toLowerCase()
@@ -107,6 +135,11 @@ app.post('/api/auth/request-password-reset', async (req, res) => {
     res.status(500).json({ error: message })
   }
 })
+
+// ======================
+// DAILY REMINDERS
+// ======================
+
 
 async function sendDailyReminderEmails() {
   if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
@@ -260,6 +293,11 @@ async function sendDailyReminderEmails() {
   console.log(`[QuickTasks server] Daily reminder emails: sent=${sent}, skipped=${skipped}`)
   return { sent, skipped }
 }
+
+
+// ======================
+// CRON ENDPOINT
+// ======================
 
 app.post('/api/reminders/send-daily', async (req, res) => {
   try {
