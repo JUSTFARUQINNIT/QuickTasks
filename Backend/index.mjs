@@ -36,7 +36,7 @@ const app = express()
 app.use(express.json())
 app.use(
   cors({
-    origin: [APP_URL, 'http://localhost:5173'],
+    origin: [APP_URL, 'https://quick-tasks-eight.vercel.app/'],
   }),
 )
 
