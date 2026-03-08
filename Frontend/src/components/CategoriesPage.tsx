@@ -1,4 +1,5 @@
-import { type FormEvent, useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import type { FormEvent } from "react";
 import { supabase } from '../lib/supabaseClient'
 
 type Category = {

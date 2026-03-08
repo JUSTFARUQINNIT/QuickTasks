@@ -1,4 +1,5 @@
-import { type FormEvent, useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import type { FormEvent } from "react";
 import { HiOutlinePencilSquare, HiOutlineTrash } from 'react-icons/hi2'
 import { supabase } from '../lib/supabaseClient'
 
