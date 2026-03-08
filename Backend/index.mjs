@@ -22,16 +22,18 @@ const admin = createClient(SUPABASE_URL ?? '', SUPABASE_SERVICE_ROLE_KEY ?? '', 
 const mailUser = process.env.EMAIL_USER
 const mailPass = process.env.EMAIL_PASS
 
-const mailTransport =
-  mailUser && mailPass
-    ? nodemailer.createTransport({
-        service: 'gmail',
-        auth: {
-          user: mailUser,
-          pass: mailPass,
-        },
-      })
-    : null
+const mailTransport = nodemailer.createTransport({
+  service: "gmail",
+  host: "smtp.gmail.com",
+  port: 587,
+  secure: false,
+  family: 4, // force IPv4
+  auth: {
+    user: mailUser,
+    pass: mailPass
+  }
+})
+    // : null
 
     const app = express();
     app.use(cors());
