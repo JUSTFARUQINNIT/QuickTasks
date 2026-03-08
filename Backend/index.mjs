@@ -7,7 +7,7 @@ import { createClient } from '@supabase/supabase-js'
 const PORT = Number(process.env.PORT ?? 8787)
 const API_URL = process.env.VITE_API_URL ?? 'https://quicktasks-backend-wqb3.onrender.com'
 const APP_URL = process.env.APP_URL ?? 'https://quick-tasks-eight.vercel.app/'
-const SUPABASE_URL = process.env.VITE_SUPABASE_URL
+const SUPABASE_URL = process.env.SUPABASE_URL
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY
 
 if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
@@ -37,7 +37,7 @@ const mailTransport =
     app.use(express.json());
     
 app.get('/health', (_req, res) => {
-  res.json("Backend is running 🚀",{ ok: true })
+  res.json({ message: "Backend is running 🚀", ok: true })
 })
 
 app.post('/api/auth/request-password-reset', async (req, res) => {
