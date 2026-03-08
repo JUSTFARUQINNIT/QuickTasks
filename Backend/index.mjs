@@ -32,29 +32,12 @@ const mailTransport =
       })
     : null
 
-const app = express()
-app.use(express.json())
-
-app.use(
-  cors({
-    origin: (origin, callback) => {
-      // Allow requests with no origin (like mobile apps, Postman)
-      if (!origin) return callback(null, true);
-      const allowedOrigins = [APP_URL, 'https://quick-tasks-eight.vercel.app/'];
-      if (allowedOrigins.includes(origin)) {
-        callback(null, true);
-      } else {
-        callback(new Error('Not allowed by CORS'));
-      }
-    },
-    methods: ['GET', 'POST', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'x-cron-secret'],
-    credentials: true, // if you need cookies
-  })
-);
-
+    const app = express();
+    app.use(cors());
+    app.use(express.json());
+    
 app.get('/health', (_req, res) => {
-  res.json({ ok: true })
+  res.json("Backend is running 🚀",{ ok: true })
 })
 
 app.post('/api/auth/request-password-reset', async (req, res) => {
