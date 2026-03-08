@@ -5,8 +5,8 @@ import nodemailer from 'nodemailer'
 import { createClient } from '@supabase/supabase-js'
 
 const PORT = Number(process.env.PORT ?? 8787)
-const API_URL = process.env.VITE_API_URL ?? 'https://quicktasks-backend-wqb3.onrender.com'
-const APP_URL = process.env.APP_URL ?? 'https://quick-tasks-eight.vercel.app/'
+const API_URL = process.env.VITE_API_URL ?? 'http://localhost:8787'
+const APP_URL = process.env.APP_URL ?? 'http://localhost:5173'
 const SUPABASE_URL = process.env.VITE_SUPABASE_URL
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY
 
@@ -34,44 +34,16 @@ const mailTransport =
 
 const app = express()
 app.use(express.json())
-
-// ======================
-// CORS CONFIGURATION
-// ======================
-const allowedOrigins = [APP_URL, 'https://quick-tasks-eight.vercel.app/']
-app.use(cors({
-  origin: function (origin, callback) {
-    if (!origin) return callback(null, true) // allow non-browser clients
-    if (allowedOrigins.indexOf(origin) === -1) {
-      return callback(new Error(`CORS policy: origin ${origin} not allowed`), false)
-    }
-    return callback(null, true)
-  },
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
-  credentials: true
-}))
-
-// Handle preflight OPTIONS requests
-// app.options('*', cors({
-//   origin: allowedOrigins,
-//   methods: ['GET','POST','PUT','DELETE','OPTIONS'],
-//   allowedHeaders: ['Content-Type', 'Authorization'],
-//   credentials: true
-// }))
-
-// ======================
-// HEALTH CHECK
-// ======================
+app.use(
+  cors({
+    origin: [APP_URL, 'http://localhost:5173'],
+  }),
+)
 
 app.get('/health', (_req, res) => {
   res.json({ ok: true })
 })
 
-
-// ======================
-// PASSWORD RESET
-// ======================
 app.post('/api/auth/request-password-reset', async (req, res) => {
   try {
     const email = String(req.body?.email ?? '').trim().toLowerCase()
@@ -135,11 +107,6 @@ app.post('/api/auth/request-password-reset', async (req, res) => {
     res.status(500).json({ error: message })
   }
 })
-
-// ======================
-// DAILY REMINDERS
-// ======================
-
 
 async function sendDailyReminderEmails() {
   if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
@@ -293,11 +260,6 @@ async function sendDailyReminderEmails() {
   console.log(`[QuickTasks server] Daily reminder emails: sent=${sent}, skipped=${skipped}`)
   return { sent, skipped }
 }
-
-
-// ======================
-// CRON ENDPOINT
-// ======================
 
 app.post('/api/reminders/send-daily', async (req, res) => {
   try {
