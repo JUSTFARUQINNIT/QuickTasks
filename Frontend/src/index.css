@@ -1,0 +1,112 @@
+@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600&display=swap');
+
+:root {
+  --qt-accent: #78d957;
+  --qt-accent-soft: color-mix(in srgb, var(--qt-accent) 20%, #0b1120);
+  --qt-bg: #020617;
+  --qt-bg-elevated: #020617;
+  --qt-border-subtle: rgba(148, 163, 184, 0.3);
+  --qt-text: #e5e7eb;
+  --qt-text-soft: #9ca3af;
+  --qt-radius-lg: 16px;
+  --qt-radius-md: 10px;
+  --qt-radius-full: 999px;
+  --qt-shadow-lg: 0 24px 60px rgba(15, 23, 42, 0.8);
+
+  font-family: 'Poppins', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background: radial-gradient(circle at top, #0b1120 0, #020617 45%, #000 100%);
+  color: var(--qt-text);
+}
+
+:root[data-theme='light'] {
+  --qt-bg: #f8fafc;
+  --qt-bg-elevated: #ffffff;
+  --qt-border-subtle: rgba(15, 23, 42, 0.16);
+  --qt-text: #0f172a;
+  --qt-text-soft: rgba(15, 23, 42, 0.68);
+}
+
+:root[data-theme='light'] body {
+  background: radial-gradient(circle at top, #ffffff 0, #f1f5f9 45%, #e2e8f0 100%);
+}
+
+:root[data-theme='light'] .sidebar,
+:root[data-theme='light'] .topbar,
+:root[data-theme='light'] .dashboard-content,
+:root[data-theme='light'] .panel-card,
+:root[data-theme='light'] .stat-card,
+:root[data-theme='light'] .tasks-panel,
+:root[data-theme='light'] .auth-card,
+:root[data-theme='light'] .profile-card,
+:root[data-theme='light'] .modal-card {
+  background: var(--qt-bg-elevated);
+  border-color: var(--qt-border-subtle);
+  color: var(--qt-text);
+}
+
+:root[data-theme='light'] .stat-card {
+  background: rgba(120, 217, 87, 0.12);
+  border-color: rgba(34, 197, 94, 0.5);
+}
+
+:root[data-theme='light'] .sidebar-icon,
+:root[data-theme='light'] .topbar-home-icon {
+  background: rgba(15, 23, 42, 0.06);
+}
+
+:root[data-theme='light'] .sidebar-nav-link:hover,
+:root[data-theme='light'] .topbar-home:hover,
+:root[data-theme='light'] .topbar-icon-btn:hover,
+:root[data-theme='light'] .task-action-btn:hover {
+  background: rgba(15, 23, 42, 0.06);
+}
+
+:root[data-theme='light'] .field input,
+:root[data-theme='light'] .tasks-form textarea,
+:root[data-theme='light'] .tasks-form select,
+:root[data-theme='light'] .tasks-search input,
+:root[data-theme='light'] .tasks-filters select,
+:root[data-theme='light'] .topbar-search input {
+  background: #ffffff;
+  color: var(--qt-text);
+  border-color: var(--qt-border-subtle);
+}
+
+:root[data-theme='light'] .task-action-btn,
+:root[data-theme='light'] .topbar-icon-btn,
+:root[data-theme='light'] .toggle {
+  background: #ffffff;
+  color: var(--qt-text);
+  border-color: var(--qt-border-subtle);
+}
+
+:root[data-theme='light'] .settings-row {
+  background: rgba(15, 23, 42, 0.03);
+  border-color: var(--qt-border-subtle);
+}
+
+#root {
+  min-height: 100vh;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+button {
+  font-family: inherit;
+}
