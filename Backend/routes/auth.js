@@ -7,6 +7,13 @@ const router = express.Router()
 const APP_URL = process.env.APP_URL ?? "http://localhost:5173/"
 
 router.post("/request-password-reset", async (req, res) => {
+
+  console.log("Reset request received. Env check:")
+  console.log("SUPABASE_URL:", process.env.SUPABASE_URL)
+  console.log("SUPABASE_KEY:", process.env.SUPABASE_SERVICE_ROLE_KEY ? "Loaded" : "Missing")
+  console.log("EMAIL_USER:", process.env.EMAIL_USER)
+  console.log("APP_URL:", process.env.APP_URL)
+
   try {
     const email = String(req.body?.email ?? "").trim().toLowerCase()
 
