@@ -4,7 +4,7 @@ import { mailTransport } from "../utils/mailer.js"
 
 const router = express.Router()
 
-const APP_URL = process.env.APP_URL ?? "http://localhost:5173/"
+const APP_URL = process.env.APP_URL ?? "https://quick-tasks-mu.vercel.app/"
 
 router.post("/request-password-reset", async (req, res) => {
 
