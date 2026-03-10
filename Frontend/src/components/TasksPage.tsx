@@ -1,7 +1,18 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { FormEvent } from "react";
 import { HiOutlinePencilSquare, HiOutlineTrash } from 'react-icons/hi2'
-import { supabase } from '../lib/supabaseClient'
+import { auth, db } from '../lib/firebaseClient'
+import {
+  addDoc,
+  collection,
+  doc,
+  getDocs,
+  orderBy,
+  query,
+  updateDoc,
+  where,
+  deleteDoc,
+} from 'firebase/firestore'
 
 type Priority = 'low' | 'medium' | 'high'
 
@@ -13,6 +24,7 @@ type Task = {
   priority: Priority
   completed: boolean
   created_at: string
+  completed_at?: string | null
   category: string | null
 }
 
@@ -88,11 +100,7 @@ export function TasksPage({ mode = 'both' }: TasksPageProps) {
       setLoading(true)
       setError(null)
       try {
-        const {
-          data: { user },
-          error: userError,
-        } = await supabase.auth.getUser()
-        if (userError) throw userError
+        const user = auth.currentUser
         if (!user) {
           if (!isMounted) return
           setTasks([])
@@ -101,24 +109,33 @@ export function TasksPage({ mode = 'both' }: TasksPageProps) {
           return
         }
 
-        const [{ data: taskData, error: taskError }, { data: categoryData, error: categoryError }] = await Promise.all([
-          supabase
-            .from('tasks')
-            .select('*')
-            .eq('user_id', user.id)
-            .order('created_at', { ascending: false }),
-          supabase.from('categories').select('name').eq('user_id', user.id).order('created_at', { ascending: true }),
+        const tasksQuery = query(
+          collection(db, 'tasks'),
+          where('user_id', '==', user.uid),
+          orderBy('created_at', 'desc'),
+        )
+        const categoriesQuery = query(
+          collection(db, 'categories'),
+          where('user_id', '==', user.uid),
+          orderBy('created_at', 'asc'),
+        )
+
+        const [tasksSnapshot, categoriesSnapshot] = await Promise.all([
+          getDocs(tasksQuery),
+          getDocs(categoriesQuery),
         ])
 
-        if (taskError) throw taskError
-        if (categoryError) throw categoryError
         if (!isMounted) return
-        setTasks((taskData ?? []) as Task[])
+
+        const taskData = tasksSnapshot.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<Task, 'id'>) }))
+        const categoryData = categoriesSnapshot.docs.map((d) => d.data() as { name?: string | null })
+
+        setTasks(taskData as Task[])
         setAvailableCategories(
           Array.from(
             new Set(
               (categoryData ?? [])
-                .map((c) => ('name' in c ? String(c.name) : '').trim())
+                .map((c) => ('name' in c ? String(c.name ?? '') : '').trim())
                 .filter((value) => value.length > 0),
             ),
           ).sort((a, b) => a.localeCompare(b)),
@@ -196,28 +213,34 @@ export function TasksPage({ mode = 'both' }: TasksPageProps) {
     setError(null)
 
     try {
-      const {
-        data: { user },
-        error: userError,
-      } = await supabase.auth.getUser()
-      if (userError) throw userError
+      const user = auth.currentUser
       if (!user) throw new Error('You must be signed in to manage tasks.')
 
-      const { data, error } = await supabase
-        .from('tasks')
-        .insert({
-          user_id: user.id,
+      const nowIso = new Date().toISOString()
+      const docRef = await addDoc(collection(db, 'tasks'), {
+        user_id: user.uid,
+        title: trimmedTitle,
+        description: trimmedDescription || null,
+        due_date: normalizedDueDate,
+        priority,
+        category: trimmedCategory || null,
+        created_at: nowIso,
+        completed: false,
+      })
+
+      setTasks((prev) => [
+        {
+          id: docRef.id,
           title: trimmedTitle,
           description: trimmedDescription || null,
           due_date: normalizedDueDate,
           priority,
           category: trimmedCategory || null,
-        })
-        .select()
-        .single()
-
-      if (error) throw error
-      setTasks((prev) => [data as Task, ...prev])
+          created_at: nowIso,
+          completed: false,
+        },
+        ...prev,
+      ])
 
       resetForm()
     } catch (err) {
@@ -278,26 +301,17 @@ export function TasksPage({ mode = 'both' }: TasksPageProps) {
     setError(null)
 
     try {
-      const {
-        data: { user },
-        error: userError,
-      } = await supabase.auth.getUser()
-      if (userError) throw userError
+      const user = auth.currentUser
       if (!user) throw new Error('You must be signed in to manage tasks.')
 
-      const { error } = await supabase
-        .from('tasks')
-        .update({
-          title: trimmedTitle,
-          description: trimmedDescription || null,
-          due_date: normalizedDueDate,
-          priority: editing.priority,
-          category: trimmedCategory || null,
-        })
-        .eq('id', editing.id)
-        .eq('user_id', user.id)
-
-      if (error) throw error
+      const ref = doc(collection(db, 'tasks'), editing.id)
+      await updateDoc(ref, {
+        title: trimmedTitle,
+        description: trimmedDescription || null,
+        due_date: normalizedDueDate,
+        priority: editing.priority,
+        category: trimmedCategory || null,
+      })
 
       setTasks((prev) =>
         prev.map((t) =>
@@ -324,13 +338,24 @@ export function TasksPage({ mode = 'both' }: TasksPageProps) {
   }
 
   async function toggleCompleted(task: Task) {
+    const nextCompleted = !task.completed
     try {
-      setTasks((prev) => prev.map((t) => (t.id === task.id ? { ...t, completed: !t.completed } : t)))
-      const { error } = await supabase
-        .from('tasks')
-        .update({ completed: !task.completed })
-        .eq('id', task.id)
-      if (error) throw error
+      setTasks((prev) =>
+        prev.map((t) =>
+          t.id === task.id
+            ? {
+                ...t,
+                completed: nextCompleted,
+                completed_at: nextCompleted ? new Date().toISOString() : null,
+              }
+            : t,
+        ),
+      )
+      const ref = doc(collection(db, 'tasks'), task.id)
+      await updateDoc(ref, {
+        completed: nextCompleted,
+        completed_at: nextCompleted ? new Date().toISOString() : null,
+      })
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Could not update task.'
       setError(message)
@@ -344,8 +369,8 @@ export function TasksPage({ mode = 'both' }: TasksPageProps) {
 
     try {
       setTasks((prev) => prev.filter((t) => t.id !== task.id))
-      const { error } = await supabase.from('tasks').delete().eq('id', task.id)
-      if (error) throw error
+      const ref = doc(collection(db, 'tasks'), task.id)
+      await deleteDoc(ref)
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Could not delete task.'
       setError(message)

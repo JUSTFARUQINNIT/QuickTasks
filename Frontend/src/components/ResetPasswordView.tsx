@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { FormEvent } from "react";
 import { Link } from 'react-router-dom'
-import { supabase } from '../lib/supabaseClient'
 
 type Props = {
   onDone: () => void
@@ -15,6 +14,22 @@ export function ResetPasswordView({ onDone }: Props) {
   const [error, setError] = useState<string | null>(null)
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
+  const [email, setEmail] = useState<string | null>(null)
+  const [token, setToken] = useState<string | null>(null)
+
+  useEffect(() => {
+    const url = new URL(window.location.href)
+    const tokenParam = url.searchParams.get('token')
+    const emailParam = url.searchParams.get('email')
+
+    if (!tokenParam || !emailParam) {
+      setError('Invalid or missing password reset link.')
+      return
+    }
+
+    setToken(tokenParam)
+    setEmail(emailParam)
+  }, [])
 
   useEffect(() => {
     if (!error) return
@@ -43,16 +58,29 @@ export function ResetPasswordView({ onDone }: Props) {
       return
     }
 
+    if (!token || !email) {
+      setError('This password reset link is invalid or has expired.')
+      return
+    }
+
     setLoading(true)
 
     try {
-      const { error: updateError } = await supabase.auth.updateUser({ password })
-      if (updateError) throw updateError
+      const rawBase = (import.meta.env.VITE_API_URL as string | undefined) ?? ''
+      const apiBase = rawBase.replace(/\/$/, '')
+      const res = await fetch(`${apiBase}/api/auth/reset-password`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, token, newPassword: password }),
+      })
+      if (!res.ok) {
+        const body = (await res.json().catch(() => null)) as { error?: string } | null
+        throw new Error(body?.error ?? 'Could not update password. Please try again.')
+      }
 
       setMessage('Your password has been updated. You can now sign in with your new password.')
       setPassword('')
       setConfirmPassword('')
-      await supabase.auth.signOut()
       onDone()
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Could not update password. Please try again.'
@@ -63,7 +91,6 @@ export function ResetPasswordView({ onDone }: Props) {
   }
 
   async function handleBackToSignIn() {
-    await supabase.auth.signOut()
     onDone()
   }
 

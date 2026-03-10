@@ -1,7 +1,13 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { FormEvent } from "react";
 import { Link } from 'react-router-dom'
-import { supabase } from '../lib/supabaseClient'
+import {
+  GoogleAuthProvider,
+  signInWithEmailAndPassword,
+  signInWithPopup,
+  createUserWithEmailAndPassword,
+} from 'firebase/auth'
+import { auth } from '../lib/firebaseClient'
 
 type AuthMode = 'signin' | 'signup'
 
@@ -46,27 +52,24 @@ export function AuthView({ mode }: Props) {
 
     try {
       if (mode === 'signin') {
-        // Supabase persists sessions by default. We keep "Remember me" as UX only for now;
-        // we could later wire it to session persistence settings if needed.
         void rememberMe
-        const { error: signInError } = await supabase.auth.signInWithPassword({ email, password })
-        if (signInError) throw signInError
+        await signInWithEmailAndPassword(auth, email, password)
       } else {
-        const {
-          data,
-          error: signUpError,
-        } = await supabase.auth.signUp({
-          email,
-          password,
-        })
-        if (signUpError) throw signUpError
+        await createUserWithEmailAndPassword(auth, email, password)
 
-        if (data.user) {
-          // Create a basic user profile row; requires a `profiles` table in Supabase
-          await supabase.from('profiles').insert({
-            id: data.user.id,
-            email: data.user.email,
+        // Fire-and-forget welcome email via backend
+        try {
+          const rawBase = (import.meta.env.VITE_API_URL as string | undefined) ?? ''
+          const apiBase = rawBase.replace(/\/$/, '')
+          void fetch(`${apiBase}/api/auth/welcome`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email }),
+          }).catch((err) => {
+            console.error('Welcome email error:', err)
           })
+        } catch (err) {
+          console.error('Welcome email trigger error:', err)
         }
 
         setMessage('Account created. Check your inbox to confirm your email before signing in.')
@@ -86,13 +89,8 @@ export function AuthView({ mode }: Props) {
     setError(null)
     setMessage(null)
     try {
-      const { error: signInError } = await supabase.auth.signInWithOAuth({
-        provider: 'google',
-        options: {
-          redirectTo: window.location.origin,
-        },
-      })
-      if (signInError) throw signInError
+      const provider = new GoogleAuthProvider()
+      await signInWithPopup(auth, provider)
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Google sign-in failed. Please try again.'
       setError(message)
@@ -125,6 +123,7 @@ export function AuthView({ mode }: Props) {
       }
       setMessage('Password reset email sent. Check your inbox.')
     } catch (err) {
+      console.error('AuthView reset password error (backend):', err)
       const message = err instanceof Error ? err.message : 'Could not send reset email. Please try again.'
       setError(message)
     } finally {

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { FormEvent } from "react";
-import { supabase } from '../lib/supabaseClient'
+import { auth, db } from '../lib/firebaseClient'
+import { doc, getDoc, setDoc, updateDoc } from 'firebase/firestore'
 
 type Profile = {
   id: string
@@ -43,11 +44,7 @@ export function ProfilePage() {
       setLoading(true)
       setError(null)
       try {
-        const {
-          data: { user },
-          error: userError,
-        } = await supabase.auth.getUser()
-        if (userError) throw userError
+        const user = auth.currentUser
         if (!user) throw new Error('You must be signed in to view your profile.')
 
         const storedTheme = (localStorage.getItem('qt:theme') as 'dark' | 'light' | null) ?? null
@@ -60,22 +57,33 @@ export function ProfilePage() {
         if (storedInApp === 'true') setNotificationInApp(true)
         if (storedEmail === 'true') setNotificationEmail(true)
 
-        // Ensure a profile row exists for this user.
-        // If your Supabase table uses RLS, make sure authenticated users can upsert/select their own row.
-        await supabase.from('profiles').upsert(
-          {
-            id: user.id,
-            email: user.email,
-          },
-          { onConflict: 'id' },
-        )
+        const ref = doc(db, 'profiles', user.uid)
+        const snap = await getDoc(ref)
 
-        const { data, error } = await supabase.from('profiles').select('*').eq('id', user.id).single()
+        if (!snap.exists()) {
+          const next: Omit<Profile, 'id'> = {
+            email: user.email ?? 'Unknown user',
+            username: null,
+            avatar_url: null,
+            avatar_data: null,
+            notifications_enabled: true,
+            notification_in_app: notificationInApp,
+            notification_email: notificationEmail,
+          }
+          await setDoc(ref, next)
+          if (!isMounted) return
+          const p: Profile = { id: user.uid, ...next }
+          setProfile(p)
+          setUsername(p.username ?? '')
+          setAvatarUrl(p.avatar_url ?? '')
+          setAvatarData(p.avatar_data ?? '')
+          return
+        }
 
-        if (error) throw error
         if (!isMounted) return
 
-        const p = data as Profile
+        const data = snap.data() as Omit<Profile, 'id'>
+        const p: Profile = { id: user.uid, ...data }
         setProfile(p)
         setUsername(p.username ?? '')
         setAvatarUrl(p.avatar_url ?? '')
@@ -197,6 +205,7 @@ export function ProfilePage() {
       }
       setPasswordResetMessage('Password reset email sent. Check your inbox and use the link to set a new password.')
     } catch (err) {
+      console.error('Profile reset password error (backend):', err)
       const msg = err instanceof Error ? err.message : 'Could not send reset email. Please try again.'
       setPasswordResetMessage(msg)
     } finally {
@@ -213,11 +222,7 @@ export function ProfilePage() {
     setMessage(null)
 
     try {
-      const {
-        data: { user },
-        error: userError,
-      } = await supabase.auth.getUser()
-      if (userError) throw userError
+      const user = auth.currentUser
       if (!user) throw new Error('You must be signed in to update your profile.')
 
       let nextAvatarData = avatarData
@@ -232,39 +237,16 @@ export function ProfilePage() {
       localStorage.setItem('qt:notification_in_app', notificationInApp ? 'true' : 'false')
       localStorage.setItem('qt:notification_email', notificationEmail ? 'true' : 'false')
 
-      // Try to persist full preferences; if the optional columns do not exist yet,
-      // gracefully fall back to a minimal payload so the app still works.
-      const basePayload = {
-        id: user.id,
-        email: user.email,
+      const ref = doc(db, 'profiles', user.uid)
+      await updateDoc(ref, {
+        email: user.email ?? null,
         username: username.trim() || null,
         avatar_url: avatarUrl.trim() || null,
         avatar_data: nextAvatarData || null,
         notifications_enabled: notificationInApp,
-      }
-
-      const payloadWithPrefs = {
-        ...basePayload,
         notification_in_app: notificationInApp,
         notification_email: notificationEmail,
-      }
-
-      let upsertError: unknown = null
-      {
-        const { error } = await supabase.from('profiles').upsert(payloadWithPrefs as never).select().single()
-        upsertError = error
-      }
-
-      if (upsertError) {
-        const msg = String((upsertError as { message?: unknown } | null)?.message ?? upsertError)
-        // If the database doesn’t have the new columns yet, retry with the base payload.
-        if (msg.includes('notification_in_app') || msg.includes('notification_email')) {
-          const { error } = await supabase.from('profiles').upsert(basePayload as never).select().single()
-          if (error) throw error
-        } else {
-          throw upsertError
-        }
-      }
+      })
 
       setProfile((prev) =>
         prev

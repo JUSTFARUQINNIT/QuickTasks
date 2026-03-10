@@ -1,7 +1,18 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Navigate, NavLink, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
 import './App.css'
-import { supabase } from './lib/supabaseClient'
+import { auth, db } from './lib/firebaseClient'
+import type { User } from 'firebase/auth'
+import { onAuthStateChanged, signOut } from 'firebase/auth'
+import {
+  collection,
+  doc,
+  getDoc,
+  getDocs,
+  query,
+  setDoc,
+  where,
+} from 'firebase/firestore'
 import { Bar, BarChart, CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { HiOutlineBell, HiOutlineClipboardDocumentList, HiOutlineCog6Tooth, HiOutlineHome, HiOutlineUserCircle } from 'react-icons/hi2'
 import { AuthView } from './components/AuthView'
@@ -15,6 +26,7 @@ type TaskSummary = {
   completed: boolean
   due_date: string | null
   created_at: string
+  completed_at?: string | null
   title?: string
 }
 
@@ -31,33 +43,39 @@ function useReminders(userId: string | null) {
     const todayKey = new Date().toISOString().slice(0, 10)
 
     async function checkReminders() {
-      const { data, error } = await supabase
-        .from('tasks')
-        .select('id, title, due_date, completed')
-        .eq('user_id', userId)
-        .eq('completed', false)
-        .not('due_date', 'is', null)
+      try {
+        const q = query(
+          collection(db, 'tasks'),
+          where('user_id', '==', userId),
+          where('completed', '==', false),
+        )
+        const snapshot = await getDocs(q)
+        if (!isMounted) return
+        const data = snapshot.docs
+          .map((d) => ({ id: d.id, ...(d.data() as Partial<TaskForReminder>) }))
+          .filter((t): t is TaskForReminder => !!t.due_date)
 
-      if (error || !data || !isMounted) return
+        const now = new Date()
+        const in24h = new Date(now.getTime() + 24 * 60 * 60 * 1000)
 
-      const now = new Date()
-      const in24h = new Date(now.getTime() + 24 * 60 * 60 * 1000)
-
-      for (const task of data as TaskForReminder[]) {
-        const due = new Date(task.due_date as string)
-        if (due > in24h) continue
-        const remindedKey = `qt:reminded:${task.id}`
-        if (localStorage.getItem(remindedKey) === todayKey) continue
-        try {
-          const dueStr = due.toLocaleDateString(undefined, { dateStyle: 'medium' })
-          new Notification('QuickTasks: Due soon', {
-            body: task.title ? `${task.title} is due ${dueStr}` : `Task due ${dueStr}`,
-            icon: '/quicktasks-logo.svg',
-          })
-          localStorage.setItem(remindedKey, todayKey)
-        } catch {
-          // ignore notification errors
+        for (const task of data as TaskForReminder[]) {
+          const due = new Date(task.due_date as string)
+          if (due > in24h) continue
+          const remindedKey = `qt:reminded:${task.id}`
+          if (localStorage.getItem(remindedKey) === todayKey) continue
+          try {
+            const dueStr = due.toLocaleDateString(undefined, { dateStyle: 'medium' })
+            new Notification('QuickTasks: Due soon', {
+              body: task.title ? `${task.title} is due ${dueStr}` : `Task due ${dueStr}`,
+              icon: '/quicktasks-logo.svg',
+            })
+            localStorage.setItem(remindedKey, todayKey)
+          } catch {
+            // ignore notification errors
+          }
         }
+      } catch {
+        // ignore reminder loading errors
       }
     }
 
@@ -78,22 +96,23 @@ function NotificationsPage() {
   useEffect(() => {
     let isMounted = true
     async function load() {
-      const { data: { user } } = await supabase.auth.getUser()
+      const user = auth.currentUser
       if (!user || !isMounted) {
         if (isMounted) setLoading(false)
         return
       }
-      const { data } = await supabase
-        .from('tasks')
-        .select('id, title, due_date')
-        .eq('user_id', user.id)
-        .eq('completed', false)
-        .not('due_date', 'is', null)
-        .order('due_date', { ascending: true })
-      if (!isMounted) return
-      const list = (data ?? []).filter((t): t is { id: string; title: string; due_date: string } =>
-        t.due_date != null && t.title != null
+      const q = query(
+        collection(db, 'tasks'),
+        where('user_id', '==', user.uid),
+        where('completed', '==', false),
       )
+      const snapshot = await getDocs(q)
+      if (!isMounted) return
+      const list = snapshot.docs
+        .map((d) => ({ id: d.id, ...(d.data() as { title?: string; due_date?: string | null }) }))
+        .filter((t): t is { id: string; title: string; due_date: string } =>
+          t.due_date != null && t.title != null
+        )
       const in7Days = new Date()
       in7Days.setDate(in7Days.getDate() + 7)
       setUpcoming(list.filter((t) => new Date(t.due_date) <= in7Days))
@@ -150,11 +169,7 @@ function DashboardOverview() {
         setLoading(true)
         setError(null)
 
-        const {
-          data: { user },
-          error: userError,
-        } = await supabase.auth.getUser()
-        if (userError) throw userError
+        const user = auth.currentUser
         if (!user) {
           if (!isMounted) return
           setTasks([])
@@ -162,14 +177,14 @@ function DashboardOverview() {
           return
         }
 
-        const { data, error: tasksError } = await supabase
-          .from('tasks')
-          .select('id, completed, due_date, created_at')
-          .eq('user_id', user.id)
-
-        if (tasksError) throw tasksError
+        const q = query(
+          collection(db, 'tasks'),
+          where('user_id', '==', user.uid),
+        )
+        const snapshot = await getDocs(q)
         if (!isMounted) return
-        setTasks((data ?? []) as TaskSummary[])
+        const data = snapshot.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<TaskSummary, 'id'>) }))
+        setTasks(data as TaskSummary[])
       } catch (err) {
         const message = err instanceof Error ? err.message : 'Could not load dashboard stats.'
         if (!isMounted) return
@@ -237,9 +252,9 @@ function DashboardOverview() {
 
       const completedCount = tasks.filter((task) => {
         if (!task.completed) return false
-        const created = new Date(task.created_at)
-        const createdKey = created.toISOString().slice(0, 10)
-        return createdKey === key
+        const doneAt = task.completed_at ?? task.created_at
+        const doneKey = new Date(doneAt).toISOString().slice(0, 10)
+        return doneKey === key
       }).length
 
       days.push({ day: label, completed: completedCount })
@@ -397,38 +412,47 @@ function App() {
   useEffect(() => {
     let isMounted = true
 
-    // Detect recovery from URL hash/query as early as possible
+    // Detect custom reset-password links as early as possible
     const currentUrl = new URL(window.location.href)
-    if (
-      currentUrl.searchParams.get('type') === 'recovery' ||
-      currentUrl.hash.includes('type=recovery')
-    ) {
+    if (currentUrl.searchParams.get('token')) {
       setIsRecovery(true)
     }
 
-    async function loadProfileForUser(user: { id: string; email: string | null | undefined }) {
+    async function loadProfileForUser(user: User) {
       try {
-        await supabase.from('profiles').upsert(
-          {
-            id: user.id,
+        const ref = doc(collection(db, 'profiles'), user.uid)
+        const snap = await getDoc(ref)
+        if (!snap.exists()) {
+          await setDoc(ref, {
             email: user.email ?? null,
-          },
-          { onConflict: 'id' },
-        )
+            username: null,
+            avatar_url: null,
+            avatar_data: null,
+          })
+          if (!isMounted) return
+          setProfile({
+            id: user.uid,
+            email: user.email ?? 'Unknown user',
+            username: null,
+            avatar_url: null,
+            avatar_data: null,
+          })
+          return
+        }
 
-        const { data, error } = await supabase
-          .from('profiles')
-          .select('id, email, username, avatar_url, avatar_data')
-          .eq('id', user.id)
-          .single()
-
-        if (error) throw error
         if (!isMounted) return
-        setProfile(data as Profile)
+        const data = snap.data() as Omit<Profile, 'id'>
+        setProfile({
+          id: user.uid,
+          email: data.email,
+          username: data.username,
+          avatar_url: data.avatar_url,
+          avatar_data: data.avatar_data,
+        })
       } catch {
         if (!isMounted) return
         setProfile({
-          id: user.id,
+          id: user.uid,
           email: user.email ?? 'Unknown user',
           username: null,
           avatar_url: null,
@@ -437,36 +461,21 @@ function App() {
       }
     }
 
-    async function loadSession() {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession()
-
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
       if (!isMounted) return
 
-      if (session?.user) {
-        await loadProfileForUser({ id: session.user.id, email: session.user.email })
-      } else {
-        setProfile(null)
-      }
-      setInitializing(false)
-    }
+      const url = new URL(window.location.href)
+      const modeParam = url.searchParams.get('mode')
+      const oobCode = url.searchParams.get('oobCode')
 
-    void loadSession()
-
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((event, session) => {
-      if (!isMounted) return
-
-      if (event === 'PASSWORD_RECOVERY') {
+      if (modeParam === 'resetPassword' && oobCode) {
         setIsRecovery(true)
         setInitializing(false)
         return
       }
 
-      if (session?.user) {
-        void loadProfileForUser({ id: session.user.id, email: session.user.email })
+      if (user) {
+        void loadProfileForUser(user)
       } else {
         setProfile(null)
       }
@@ -475,7 +484,7 @@ function App() {
 
     return () => {
       isMounted = false
-      subscription.unsubscribe()
+      unsubscribe()
     }
   }, [])
 
@@ -498,10 +507,11 @@ function App() {
   }, [])
 
   async function handleSignOut() {
-    await supabase.auth.signOut()
+    await signOut(auth)
   }
 
-  function handlePasswordResetDone() {
+  async function handlePasswordResetDone() {
+    await signOut(auth)
     setIsRecovery(false)
     setProfile(null)
   }

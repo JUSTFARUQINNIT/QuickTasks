@@ -1,6 +1,18 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { FormEvent } from "react";
-import { supabase } from '../lib/supabaseClient'
+import { auth, db } from '../lib/firebaseClient'
+import {
+  addDoc,
+  collection,
+  deleteDoc,
+  doc,
+  getDocs,
+  orderBy,
+  query,
+  updateDoc,
+  where,
+  writeBatch,
+} from 'firebase/firestore'
 
 type Category = {
   id: string
@@ -41,11 +53,7 @@ export function CategoriesPage() {
           // ignore cache errors
         }
 
-        const {
-          data: { user },
-          error: userError,
-        } = await supabase.auth.getUser()
-        if (userError) throw userError
+        const user = auth.currentUser
         if (!user) {
           if (!isMounted) return
           setCategories([])
@@ -54,20 +62,34 @@ export function CategoriesPage() {
           return
         }
 
-        const [{ data: categoryData, error: categoryError }, { data: taskData, error: taskError }] = await Promise.all([
-          supabase.from('categories').select('*').eq('user_id', user.id).order('created_at', { ascending: true }),
-          supabase
-            .from('tasks')
-            .select('id, category')
-            .eq('user_id', user.id),
+        const categoriesQuery = query(
+          collection(db, 'categories'),
+          where('user_id', '==', user.uid),
+          orderBy('created_at', 'asc'),
+        )
+        const tasksQuery = query(
+          collection(db, 'tasks'),
+          where('user_id', '==', user.uid),
+        )
+
+        const [categoriesSnapshot, tasksSnapshot] = await Promise.all([
+          getDocs(categoriesQuery),
+          getDocs(tasksQuery),
         ])
 
-        if (categoryError) throw categoryError
-        if (taskError) throw taskError
-
         if (!isMounted) return
-        setCategories((categoryData ?? []) as Category[])
-        setTasks((taskData ?? []) as { id: string; category: string | null }[])
+
+        const categoryData = categoriesSnapshot.docs.map((d) => ({
+          id: d.id,
+          ...(d.data() as Omit<Category, 'id'>),
+        }))
+        const taskData = tasksSnapshot.docs.map((d) => ({
+          id: d.id,
+          category: (d.data() as { category?: string | null }).category ?? null,
+        }))
+
+        setCategories(categoryData as Category[])
+        setTasks(taskData)
       } catch (err) {
         const message = err instanceof Error ? err.message : 'Could not load categories.'
         if (!isMounted) return
@@ -121,47 +143,38 @@ export function CategoriesPage() {
         return
       }
 
-      const {
-        data: { user },
-        error: userError,
-      } = await supabase.auth.getUser()
-      if (userError) throw userError
+      const user = auth.currentUser
       if (!user) throw new Error('You must be signed in to manage categories.')
 
       if (editing) {
-        const { error: updateError } = await supabase
-          .from('categories')
-          .update({ name: trimmedName })
-          .eq('id', editing.id)
-          .eq('user_id', user.id)
+        const categoryRef = doc(db, 'categories', editing.id)
+        await updateDoc(categoryRef, { name: trimmedName })
 
-        if (updateError) throw updateError
-
-        const { error: taskUpdateError } = await supabase
-          .from('tasks')
-          .update({ category: trimmedName })
-          .eq('user_id', user.id)
-          .eq('category', editing.name)
-
-        if (taskUpdateError) throw taskUpdateError
+        const tasksQuery = query(
+          collection(db, 'tasks'),
+          where('user_id', '==', user.uid),
+          where('category', '==', editing.name),
+        )
+        const tasksSnapshot = await getDocs(tasksQuery)
+        const batch = writeBatch(db)
+        tasksSnapshot.forEach((taskDoc) => {
+          batch.update(taskDoc.ref, { category: trimmedName })
+        })
+        await batch.commit()
 
         setCategories((prev) => prev.map((c) => (c.id === editing.id ? { ...c, name: trimmedName } : c)))
         setTasks((prev) =>
           prev.map((t) => (t.category === editing.name ? { ...t, category: trimmedName } : t)),
         )
       } else {
-        const { data, error: insertError } = await supabase
-          .from('categories')
-          .insert({
-            user_id: user.id,
-            name: trimmedName,
-          })
-          .select()
-          .single()
+        const nowIso = new Date().toISOString()
+        const newRef = await addDoc(collection(db, 'categories'), {
+          user_id: user.uid,
+          name: trimmedName,
+          created_at: nowIso,
+        })
 
-        if (insertError) throw insertError
-
-        setCategories((prev) => [...prev, data as Category])
+        setCategories((prev) => [...prev, { id: newRef.id, name: trimmedName, created_at: nowIso }])
       }
 
       setName('')
@@ -188,24 +201,22 @@ export function CategoriesPage() {
     setError(null)
 
     try {
-      const {
-        data: { user },
-        error: userError,
-      } = await supabase.auth.getUser()
-      if (userError) throw userError
+      const user = auth.currentUser
       if (!user) throw new Error('You must be signed in to manage categories.')
 
-      const [{ error: deleteError }, { error: clearTasksError }] = await Promise.all([
-        supabase.from('categories').delete().eq('id', category.id).eq('user_id', user.id),
-        supabase
-          .from('tasks')
-          .update({ category: null })
-          .eq('user_id', user.id)
-          .eq('category', category.name),
-      ])
-
-      if (deleteError) throw deleteError
-      if (clearTasksError) throw clearTasksError
+      const categoryRef = doc(db, 'categories', category.id)
+      const tasksQuery = query(
+        collection(db, 'tasks'),
+        where('user_id', '==', user.uid),
+        where('category', '==', category.name),
+      )
+      const tasksSnapshot = await getDocs(tasksQuery)
+      const batch = writeBatch(db)
+      batch.delete(categoryRef)
+      tasksSnapshot.forEach((taskDoc) => {
+        batch.update(taskDoc.ref, { category: null })
+      })
+      await batch.commit()
 
       setCategories((prev) => prev.filter((c) => c.id !== category.id))
       setTasks((prev) =>
