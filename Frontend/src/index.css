@@ -1,6 +1,6 @@
 @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600&display=swap');
 
-:root {
+ :root {
   --qt-accent: #78d957;
   --qt-accent-soft: color-mix(in srgb, var(--qt-accent) 20%, #0b1120);
   --qt-bg: #020617;
@@ -95,6 +95,11 @@ body {
 
 :root[data-theme='light'] .settings-row {
   background: rgba(15, 23, 42, 0.03);
+  border-color: var(--qt-border-subtle);
+}
+
+:root[data-theme='light'] .tasks-shell--tasks .task-item {
+  background: #ffffff;
   border-color: var(--qt-border-subtle);
 }
 

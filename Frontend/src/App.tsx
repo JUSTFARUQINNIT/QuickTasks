@@ -493,9 +493,9 @@ function App() {
     document.documentElement.dataset.theme = storedTheme === 'light' ? 'light' : 'dark'
 
     function syncSidebarToViewport() {
-      if (window.innerWidth <= 425) {
-        setIsSidebarCollapsed(true)
-      }
+      // On small screens, default to the sidebar being hidden (drawer closed).
+      // On larger screens, keep the sidebar visible so navigation is always accessible.
+      setIsSidebarCollapsed(window.innerWidth <= 640)
     }
 
     syncSidebarToViewport()
@@ -564,7 +564,7 @@ function App() {
             className="sidebar-brand"
             onClick={() => {
               navigate('/dashboard')
-              if (window.innerWidth <= 425) setIsSidebarCollapsed(true)
+              if (window.innerWidth <= 640) setIsSidebarCollapsed(true)
             }}
           >
             <span className="sidebar-brand-mark">
@@ -578,7 +578,7 @@ function App() {
               to="/dashboard"
               className={({ isActive }) => `sidebar-nav-link ${isActive ? 'is-active' : ''}`}
               onClick={() => {
-                if (window.innerWidth <= 425) setIsSidebarCollapsed(true)
+                if (window.innerWidth <= 640) setIsSidebarCollapsed(true)
               }}
             >
               <span className="sidebar-icon">
@@ -590,7 +590,7 @@ function App() {
               to="/tasks/add"
               className={({ isActive }) => `sidebar-nav-link ${isActive ? 'is-active' : ''}`}
               onClick={() => {
-                if (window.innerWidth <= 425) setIsSidebarCollapsed(true)
+                if (window.innerWidth <= 640) setIsSidebarCollapsed(true)
               }}
             >
               <span className="sidebar-icon">
@@ -602,7 +602,7 @@ function App() {
               to="/tasks/all"
               className={({ isActive }) => `sidebar-nav-link ${isActive ? 'is-active' : ''}`}
               onClick={() => {
-                if (window.innerWidth <= 425) setIsSidebarCollapsed(true)
+                if (window.innerWidth <= 640) setIsSidebarCollapsed(true)
               }}
             >
               <span className="sidebar-icon">
@@ -614,7 +614,7 @@ function App() {
               to="/categories"
               className={({ isActive }) => `sidebar-nav-link ${isActive ? 'is-active' : ''}`}
               onClick={() => {
-                if (window.innerWidth <= 425) setIsSidebarCollapsed(true)
+                if (window.innerWidth <= 640) setIsSidebarCollapsed(true)
               }}
             >
               <span className="sidebar-icon">
@@ -626,7 +626,7 @@ function App() {
               to="/notifications"
               className={({ isActive }) => `sidebar-nav-link ${isActive ? 'is-active' : ''}`}
               onClick={() => {
-                if (window.innerWidth <= 425) setIsSidebarCollapsed(true)
+                if (window.innerWidth <= 640) setIsSidebarCollapsed(true)
               }}
             >
               <span className="sidebar-icon">
@@ -638,7 +638,7 @@ function App() {
               to="/settings"
               className={({ isActive }) => `sidebar-nav-link ${isActive ? 'is-active' : ''}`}
               onClick={() => {
-                if (window.innerWidth <= 425) setIsSidebarCollapsed(true)
+                if (window.innerWidth <= 640) setIsSidebarCollapsed(true)
               }}
             >
               <span className="sidebar-icon">
@@ -654,12 +654,12 @@ function App() {
         </button>
       </aside>
 
-      {/* <button
+      <button
         type="button"
         className="sidebar-backdrop"
         aria-label="Close navigation"
         onClick={() => setIsSidebarCollapsed(true)}
-      /> */}
+      />
 
       <div className="dashboard-main">
         <header className="topbar">
@@ -679,10 +679,6 @@ function App() {
 
           <div className="topbar-spacer" />
 
-          {/* <div className="topbar-search">
-            <input placeholder="Search tasks..." aria-label="Search tasks" />
-          </div> */}
-
           <div className="topbar-actions">
             <span className="topbar-greeting">Hi, {displayName}</span>
             <button
@@ -693,14 +689,7 @@ function App() {
             >
               <HiOutlineBell />
             </button>
-            <button
-              type="button"
-              className="topbar-icon-btn"
-              aria-label="Settings"
-              onClick={() => navigate('/settings')}
-            >
-              <HiOutlineCog6Tooth />
-            </button>
+          
             <NavLink
               to="/settings"
               className="topbar-avatar"

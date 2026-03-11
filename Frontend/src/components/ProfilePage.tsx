@@ -328,7 +328,7 @@ export function ProfilePage() {
               </label>
 
               <div className="settings-section">
-                <div className="settings-row">
+                <div className="settings-row reset">
                   <div>
                     <strong>Change password</strong>
                     <span>Send a reset link to {profile?.email ?? 'your email'} to set a new password.</span>

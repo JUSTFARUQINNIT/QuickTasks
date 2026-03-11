@@ -1406,6 +1406,65 @@
   gap: 8px;
 }
 
+.tasks-shell--tasks .task-item {
+  background: #020617;
+  border-radius: 8px;
+  border: 1px solid rgba(30, 64, 175, 0.6);
+  padding: 10px 12px;
+}
+
+.tasks-shell--tasks .task-card-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.tasks-shell--tasks .task-header-text {
+  flex: 1;
+  text-transform: capitalize;
+}
+
+.tasks-shell--tasks .task-status--pill {
+  align-self: flex-start;
+}
+
+.tasks-shell--tasks .task-card-body {
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.tasks-shell--tasks .task-card-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  font-size: 0.82rem;
+  margin-top: 5px;
+}
+
+.tasks-shell--tasks .task-card-label {
+  font-weight: 500;
+  color: var(--qt-text);
+}
+
+.tasks-shell--tasks .task-card-value {
+  font-weight: 500;
+  color: var(--qt-text-soft);
+  flex: 1;
+  text-align: right;
+}
+
+.tasks-shell--tasks .task-card-value--multiline {
+  text-align: left;
+  word-wrap: break-word;
+  word-break: break-word;
+  white-space: normal;
+  text-align: right;
+}
+
 .task-meta-category {
   font-size: 1rem;
   margin-right: 4px;
@@ -1427,40 +1486,8 @@
   align-items: center;
   gap: 4px;
 }
-/* Mobile-friendly labels for task cards (All Tasks view) */
-@media (max-width: 768px) {
-  .tasks-shell--tasks .task-title::before {
-    content: 'Title: ';
-    font-size: 1rem;
-    color: var(--qt-text-soft);
-    margin-right: 4px;
-  }
-
-  .tasks-shell--tasks .task-meta-category::before {
-    content: 'Category: ';
-    font-size: 1rem;
-    color: var(--qt-text-soft);
-  }
-
-  .tasks-shell--tasks .task-pill::before {
-    content: 'Priority: ';
-    font-size: 1rem;
-    margin-right: 4px;
-    color: var(--qt-text-soft);
-  }
-  .tasks-shell--tasks .task-description::before {
-    content: 'Description: ';
-    font-size: 1rem;
-    color: var(--qt-text-soft);
-    margin-right: 4px;
-  }
-
-  .tasks-shell--tasks .task-status::before {
-    content: 'Status: ';
-    font-size: 0.72rem;
-    margin-right: 4px;
-  }
-}
+/* The card rows + status pill layout already act as labeled fields,
+   so we can drop the old pseudo-labels to avoid clutter. */
 
 .sidebar-backdrop {
   display: none;
@@ -1505,11 +1532,6 @@
     flex-wrap: wrap;
     align-items: flex-start;
   }
-
-  .topbar-home {
-    order: 1;
-  }
-
   .topbar-menu-btn {
     order: 0;
   }
@@ -1537,7 +1559,7 @@
   }
 
   .tasks-shell--tasks .task-check {
-    visibility: hidden;
+    display: none;
   }
 
   .tasks-shell--tasks .task-item {
@@ -1550,34 +1572,66 @@
     padding: 10px 10px 12px;
   }
 
-  .tasks-shell--tasks .tasks-list-header {
-    padding: 16px;
-  }
+.tasks-shell--tasks .tasks-list-header {
+  padding: 16px;
 }
 
-@media (max-width: 640px) {
-  .sidebar {
-    width: 78px;
-  }
-
-  .dashboard-shell--collapsed .sidebar {
-    width: 68px;
-  }
-
+.tasks-shell--tasks .task-header-text {
+  font-weight: 700;
+  font-size: 25px;
+}
+}
+@media (max-width: 675px) {
+  /* Mobile: sidebar becomes an off-canvas drawer (hidden by default). */
   .dashboard-main {
-    margin-left: 78px;
+    margin-left: 0;
   }
 
   .dashboard-shell--collapsed .dashboard-main {
-    margin-left: 68px;
+    margin-left: 0;
   }
 
   .topbar {
-    left: 78px;
+    left: 0;
   }
 
   .dashboard-shell--collapsed .topbar {
-    left: 68px;
+    left: 0;
+  }
+
+  .sidebar {
+    position: fixed;
+    inset: 0 auto 0 0;
+    width: 260px;
+    max-width: 84%;
+    transform: translateX(0);
+    transition: transform 0.2s ease-out;
+    z-index: 40;
+  }
+
+  .dashboard-shell--collapsed .sidebar {
+    width: 260px;
+    transform: translateX(-100%);
+  }
+
+  .sidebar-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(15, 23, 42, 0.72);
+    border: none;
+    padding: 0;
+    margin: 0;
+    cursor: pointer;
+    z-index: 30;
+    display: block;
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  .dashboard-shell--collapsed .sidebar-backdrop {
+    display: block;
+    opacity: 0;
+    pointer-events: none;
   }
 
   .dashboard-grid {
@@ -1590,35 +1644,11 @@
 }
 
 @media (max-width: 480px) {
-  .topbar-greeting {
-    display: none;
-  }
-
-  .sidebar {
-    width: 64px;
-    padding: 10px 8px 8px;
-  }
-
-  .dashboard-shell--collapsed .sidebar {
-    width: 56px;
-  }
-
-  .dashboard-main {
-    margin-left: 64px;
-  }
-
-  .dashboard-shell--collapsed .dashboard-main {
-    margin-left: 56px;
-  }
-
+ 
   .topbar {
     left: 64px;
     padding: 8px 10px;
     gap: 6px;
-  }
-
-  .dashboard-shell--collapsed .topbar {
-    left: 56px;
   }
 
   .topbar-home-label {
@@ -1654,57 +1684,26 @@
   }
 }
 
-@media (max-width: 425px) {
-  .dashboard-main {
-    margin-left: 0;
-  }
 
-  .dashboard-shell--collapsed .dashboard-main {
-    margin-left: 0;
-  }
-
-  .topbar {
-    left: 0;
-  }
-
-  .dashboard-shell--collapsed .topbar {
-    left: 0;
-  }
-
-  .sidebar {
-    position: fixed;
-    inset: 0 auto 0 0;
-    width: 240px;
-    max-width: 80%;
-    transform: translateX(0);
-    transition: transform 0.2s ease-out;
-    z-index: 40;
-  }
-
-  .dashboard-shell--collapsed .sidebar {
-    transform: translateX(-100%);
-  }
-
-  .sidebar-backdrop {
-    position: fixed;
-    inset: 0;
-    background: rgba(15, 23, 42, 0.72);
-    border: none;
-    padding: 0;
-    margin: 0;
-    cursor: pointer;
-    z-index: 30;
+@media (max-width: 375px) {
+  .panel-header {
     display: block;
-    opacity: 1;
-    pointer-events: auto;
   }
-
-  .dashboard-shell--collapsed .sidebar-backdrop {
+  .panel-header h2{
+    margin-bottom: 5px;
+  }
+  .tasks-form-row{
     display: block;
-    opacity: 0;
-    pointer-events: none;
+  }
+  .field .priority-label{
+    margin-top: 10px;
+  }
+  .tasks-shell--tasks .task-header-text {
+    font-weight: 700;
+    font-size: 20px;
   }
 }
+
 
 @media (max-width: 640px) {
   .auth-card {
@@ -1727,6 +1726,23 @@
 
   .app-shell {
     gap: 12px;
+  }
+}
+@media (max-width: 500px) {
+  .topbar-greeting{
+    display: none;
+  }
+}
+
+@media (max-width: 425px) {
+  .settings-row.reset{
+    display: block;
+  }
+  .settings-row strong{
+    margin-bottom: 5px;
+  }
+  .settings-row span{
+    margin-bottom: 10px;
   }
 }
 
@@ -1842,3 +1858,6 @@
   transform: translateX(18px);
   background: #78d957;
 }
+}
+
+/* End of stylesheet */

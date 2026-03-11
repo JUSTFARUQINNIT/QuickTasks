@@ -1,7 +1,17 @@
-import { useEffect, useMemo, useState } from 'react'
-import type { FormEvent } from "react";
+import { useEffect, useMemo, useRef, useState } from 'react'
+import type { CSSProperties, FormEvent, ReactNode } from "react";
 import { HiOutlinePencilSquare, HiOutlineTrash } from 'react-icons/hi2'
 import { auth, db } from '../lib/firebaseClient'
+import {
+  DndContext,
+  PointerSensor,
+  closestCenter,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from '@dnd-kit/core'
+import { SortableContext, arrayMove, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable'
+import { CSS } from '@dnd-kit/utilities'
 import {
   addDoc,
   collection,
@@ -12,7 +22,9 @@ import {
   updateDoc,
   where,
   deleteDoc,
+  writeBatch,
 } from 'firebase/firestore'
+import { enqueueOfflineAction, readCachedTasks, readOfflineQueue, writeCachedTasks, writeOfflineQueue } from '../lib/offlineTasks'
 
 type Priority = 'low' | 'medium' | 'high'
 
@@ -26,6 +38,9 @@ type Task = {
   created_at: string
   completed_at?: string | null
   category: string | null
+  order: number
+  assigned_to?: string | null
+  assigned_email?: string | null
 }
 
 type EditingState = {
@@ -47,6 +62,9 @@ export function TasksPage({ mode = 'both' }: TasksPageProps) {
   const [tasks, setTasks] = useState<Task[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [isOffline, setIsOffline] = useState(() => (typeof navigator !== 'undefined' ? !navigator.onLine : false))
+  const [isSyncing, setIsSyncing] = useState(false)
+  const syncInFlight = useRef(false)
 
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
@@ -61,6 +79,8 @@ export function TasksPage({ mode = 'both' }: TasksPageProps) {
   const [categoryFilter, setCategoryFilter] = useState<'all' | string>('all')
 
   const [availableCategories, setAvailableCategories] = useState<string[]>([])
+  const [assigningTaskId, setAssigningTaskId] = useState<string | null>(null)
+  const [assignSaving, setAssignSaving] = useState(false)
 
   const hasTasks = tasks.length > 0
 
@@ -70,27 +90,26 @@ export function TasksPage({ mode = 'both' }: TasksPageProps) {
         if (a.completed !== b.completed) {
           return a.completed ? 1 : -1
         }
-        if (a.due_date && b.due_date) {
-          return a.due_date.localeCompare(b.due_date)
-        }
-        if (a.due_date) return -1
-        if (b.due_date) return 1
+        // Primary ordering is user-controlled drag-and-drop order.
+        const orderDiff = (a.order ?? 0) - (b.order ?? 0)
+        if (orderDiff !== 0) return orderDiff
         return a.created_at.localeCompare(b.created_at)
       }),
     [tasks],
   )
 
+  const canReorder = useMemo(() => {
+    return search.trim().length === 0 && statusFilter === 'all' && categoryFilter === 'all'
+  }, [search, statusFilter, categoryFilter])
+
   useEffect(() => {
     let isMounted = true
 
     try {
-      const cached = localStorage.getItem('qt:tasks')
-      if (cached) {
-        const parsed = JSON.parse(cached) as Task[]
-        if (Array.isArray(parsed) && isMounted) {
-          setTasks(parsed)
-          setLoading(false)
-        }
+      const cached = readCachedTasks<Task>()
+      if (cached.length > 0 && isMounted) {
+        setTasks(cached)
+        setLoading(false)
       }
     } catch {
       // ignore cache errors
@@ -109,7 +128,15 @@ export function TasksPage({ mode = 'both' }: TasksPageProps) {
           return
         }
 
-        const tasksQuery = query(
+        if (!navigator.onLine) {
+          // Offline: rely on cached_tasks (set above). Keep UX responsive.
+          if (!isMounted) return
+          setLoading(false)
+          return
+        }
+
+        const tasksQuery = query(collection(db, 'tasks'), where('user_id', '==', user.uid), orderBy('order', 'asc'))
+        const legacyTasksQuery = query(
           collection(db, 'tasks'),
           where('user_id', '==', user.uid),
           orderBy('created_at', 'desc'),
@@ -121,7 +148,15 @@ export function TasksPage({ mode = 'both' }: TasksPageProps) {
         )
 
         const [tasksSnapshot, categoriesSnapshot] = await Promise.all([
-          getDocs(tasksQuery),
+          (async () => {
+            try {
+              return await getDocs(tasksQuery)
+            } catch {
+              // Backward compatible: if the composite index for (user_id, order) is missing,
+              // fall back to created_at so the page still loads.
+              return await getDocs(legacyTasksQuery)
+            }
+          })(),
           getDocs(categoriesQuery),
         ])
 
@@ -130,7 +165,23 @@ export function TasksPage({ mode = 'both' }: TasksPageProps) {
         const taskData = tasksSnapshot.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<Task, 'id'>) }))
         const categoryData = categoriesSnapshot.docs.map((d) => d.data() as { name?: string | null })
 
-        setTasks(taskData as Task[])
+        const hasAnyMissingOrder = (taskData as Array<Record<string, unknown>>).some((t) => typeof t.order !== 'number')
+
+        const normalizedTasks = (taskData as Task[]).map((t) => ({
+          ...t,
+          order: typeof t.order === 'number' ? t.order : 0,
+        }))
+
+        const nextTasks = hasAnyMissingOrder
+          ? // First-time migration: preserve existing behavior (newest first) by assigning
+            // a sequential order based on created_at descending.
+            [...normalizedTasks]
+              .sort((a, b) => b.created_at.localeCompare(a.created_at))
+              .map((t, idx) => ({ ...t, order: idx + 1 }))
+          : normalizedTasks
+
+        setTasks(nextTasks)
+        writeCachedTasks(nextTasks)
         setAvailableCategories(
           Array.from(
             new Set(
@@ -140,6 +191,17 @@ export function TasksPage({ mode = 'both' }: TasksPageProps) {
             ),
           ).sort((a, b) => a.localeCompare(b)),
         )
+
+        // Persist missing `order` fields so future fetches are stable + sortable.
+        // (Firestore will happily sort missing fields, but the ordering is not user-friendly or stable.)
+        if (hasAnyMissingOrder) {
+          const batch = writeBatch(db)
+          for (const task of nextTasks) {
+            const ref = doc(collection(db, 'tasks'), task.id)
+            batch.update(ref, { order: task.order })
+          }
+          await batch.commit()
+        }
       } catch (err) {
         const message = err instanceof Error ? err.message : 'Could not load tasks.'
         if (!isMounted) return
@@ -158,11 +220,136 @@ export function TasksPage({ mode = 'both' }: TasksPageProps) {
 
   useEffect(() => {
     try {
-      localStorage.setItem('qt:tasks', JSON.stringify(tasks))
+      writeCachedTasks(tasks)
     } catch {
       // ignore write errors
     }
   }, [tasks])
+
+  useEffect(() => {
+    function handleOnline() {
+      setIsOffline(false)
+      void syncTasks()
+    }
+    function handleOffline() {
+      setIsOffline(true)
+    }
+
+    window.addEventListener('online', handleOnline)
+    window.addEventListener('offline', handleOffline)
+    return () => {
+      window.removeEventListener('online', handleOnline)
+      window.removeEventListener('offline', handleOffline)
+    }
+  }, [])
+
+  async function syncTasks() {
+    if (syncInFlight.current) return
+    if (!navigator.onLine) return
+
+    const user = auth.currentUser
+    if (!user) return
+
+    const queue = readOfflineQueue()
+    if (queue.length === 0) return
+
+    syncInFlight.current = true
+    setIsSyncing(true)
+
+    // Offline sync logic:
+    // - process queued operations sequentially to preserve user intent
+    // - map offline-created temp IDs to server IDs, and rewrite remaining queued items + cached tasks
+    try {
+      const idMap = new Map<string, string>()
+
+      for (const item of queue) {
+        if (item.type === 'create') {
+          const { tempId, task } = item.payload
+          const created = await addDoc(collection(db, 'tasks'), task)
+          idMap.set(tempId, created.id)
+
+          setTasks((prev) =>
+            prev.map((t) => (t.id === tempId ? { ...t, id: created.id } : t)),
+          )
+        } else if (item.type === 'update') {
+          const docId = idMap.get(item.payload.id) ?? item.payload.id
+          const ref = doc(collection(db, 'tasks'), docId)
+          await updateDoc(ref, item.payload.updates)
+        } else if (item.type === 'delete') {
+          const docId = idMap.get(item.payload.id) ?? item.payload.id
+          const ref = doc(collection(db, 'tasks'), docId)
+          await deleteDoc(ref)
+        } else if (item.type === 'reorder') {
+          const batch = writeBatch(db)
+          for (const entry of item.payload.orders) {
+            const docId = idMap.get(entry.id) ?? entry.id
+            const ref = doc(collection(db, 'tasks'), docId)
+            batch.update(ref, { order: entry.order })
+          }
+          await batch.commit()
+        }
+      }
+
+      // Rewrite queue and cached tasks with mapped IDs, then clear queue.
+      if (idMap.size > 0) {
+        setTasks((prev) => prev.map((t) => ({ ...t, id: idMap.get(t.id) ?? t.id })))
+      }
+
+      writeOfflineQueue([])
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Sync failed.'
+      setError(message)
+      // Keep queue so we can retry later.
+    } finally {
+      syncInFlight.current = false
+      setIsSyncing(false)
+    }
+  }
+
+  async function handleAssign(task: Task) {
+    const email = window.prompt('Assign to collaborator (email):', task.assigned_email ?? '')
+    if (!email) return
+
+    try {
+      const user = auth.currentUser
+      if (!user) throw new Error('You must be signed in to assign tasks.')
+
+      setAssigningTaskId(task.id)
+      setAssignSaving(true)
+      setError(null)
+
+      const rawBase = (import.meta.env.VITE_API_URL as string | undefined) ?? ''
+      const apiBase = rawBase.replace(/\/$/, '')
+
+      const res = await fetch(`${apiBase}/api/collab/tasks/${encodeURIComponent(task.id)}/assign`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ assignedToUserId: email }),
+      })
+
+      if (!res.ok) {
+        const body = (await res.json().catch(() => null)) as { error?: string } | null
+        throw new Error(body?.error ?? 'Could not assign task.')
+      }
+
+      setTasks((prev) =>
+        prev.map((t) =>
+          t.id === task.id
+            ? {
+                ...t,
+                assigned_email: email,
+              }
+            : t,
+        ),
+      )
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Could not assign task.'
+      setError(message)
+    } finally {
+      setAssignSaving(false)
+      setAssigningTaskId(null)
+    }
+  }
 
   function resetForm() {
     setTitle('')
@@ -217,7 +404,9 @@ export function TasksPage({ mode = 'both' }: TasksPageProps) {
       if (!user) throw new Error('You must be signed in to manage tasks.')
 
       const nowIso = new Date().toISOString()
-      const docRef = await addDoc(collection(db, 'tasks'), {
+      const minExistingOrder = tasks.reduce((min, t) => (typeof t.order === 'number' ? Math.min(min, t.order) : min), 1)
+      const nextOrder = tasks.length === 0 ? 1 : minExistingOrder - 1
+      const taskDoc = {
         user_id: user.uid,
         title: trimmedTitle,
         description: trimmedDescription || null,
@@ -226,21 +415,48 @@ export function TasksPage({ mode = 'both' }: TasksPageProps) {
         category: trimmedCategory || null,
         created_at: nowIso,
         completed: false,
-      })
+        order: nextOrder,
+      }
 
-      setTasks((prev) => [
-        {
-          id: docRef.id,
-          title: trimmedTitle,
-          description: trimmedDescription || null,
-          due_date: normalizedDueDate,
-          priority,
-          category: trimmedCategory || null,
-          created_at: nowIso,
-          completed: false,
-        },
-        ...prev,
-      ])
+      if (!navigator.onLine) {
+        const tempId =
+          typeof crypto !== 'undefined' && 'randomUUID' in crypto && typeof crypto.randomUUID === 'function'
+            ? crypto.randomUUID()
+            : `local_${Date.now()}_${Math.random().toString(16).slice(2)}`
+
+        setTasks((prev) => [
+          {
+            id: tempId,
+            title: trimmedTitle,
+            description: trimmedDescription || null,
+            due_date: normalizedDueDate,
+            priority,
+            category: trimmedCategory || null,
+            created_at: nowIso,
+            completed: false,
+            order: nextOrder,
+          },
+          ...prev,
+        ])
+
+        enqueueOfflineAction({ type: 'create', payload: { tempId, task: taskDoc } })
+      } else {
+        const docRef = await addDoc(collection(db, 'tasks'), taskDoc)
+        setTasks((prev) => [
+          {
+            id: docRef.id,
+            title: trimmedTitle,
+            description: trimmedDescription || null,
+            due_date: normalizedDueDate,
+            priority,
+            category: trimmedCategory || null,
+            created_at: nowIso,
+            completed: false,
+            order: nextOrder,
+          },
+          ...prev,
+        ])
+      }
 
       resetForm()
     } catch (err) {
@@ -304,14 +520,20 @@ export function TasksPage({ mode = 'both' }: TasksPageProps) {
       const user = auth.currentUser
       if (!user) throw new Error('You must be signed in to manage tasks.')
 
-      const ref = doc(collection(db, 'tasks'), editing.id)
-      await updateDoc(ref, {
+      const updates = {
         title: trimmedTitle,
         description: trimmedDescription || null,
         due_date: normalizedDueDate,
         priority: editing.priority,
         category: trimmedCategory || null,
-      })
+      }
+
+      if (!navigator.onLine) {
+        enqueueOfflineAction({ type: 'update', payload: { id: editing.id, updates } })
+      } else {
+        const ref = doc(collection(db, 'tasks'), editing.id)
+        await updateDoc(ref, updates)
+      }
 
       setTasks((prev) =>
         prev.map((t) =>
@@ -351,11 +573,17 @@ export function TasksPage({ mode = 'both' }: TasksPageProps) {
             : t,
         ),
       )
-      const ref = doc(collection(db, 'tasks'), task.id)
-      await updateDoc(ref, {
+      const updates = {
         completed: nextCompleted,
         completed_at: nextCompleted ? new Date().toISOString() : null,
-      })
+      }
+
+      if (!navigator.onLine) {
+        enqueueOfflineAction({ type: 'update', payload: { id: task.id, updates } })
+      } else {
+        const ref = doc(collection(db, 'tasks'), task.id)
+        await updateDoc(ref, updates)
+      }
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Could not update task.'
       setError(message)
@@ -369,12 +597,86 @@ export function TasksPage({ mode = 'both' }: TasksPageProps) {
 
     try {
       setTasks((prev) => prev.filter((t) => t.id !== task.id))
-      const ref = doc(collection(db, 'tasks'), task.id)
-      await deleteDoc(ref)
+      if (!navigator.onLine) {
+        enqueueOfflineAction({ type: 'delete', payload: { id: task.id } })
+      } else {
+        const ref = doc(collection(db, 'tasks'), task.id)
+        await deleteDoc(ref)
+      }
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Could not delete task.'
       setError(message)
     }
+  }
+
+  async function persistReorder(nextTasks: Task[]) {
+    const orders = nextTasks.map((t, idx) => ({ id: t.id, order: idx + 1 }))
+    setTasks(nextTasks.map((t, idx) => ({ ...t, order: idx + 1 })))
+
+    if (!navigator.onLine) {
+      enqueueOfflineAction({ type: 'reorder', payload: { orders } })
+      return
+    }
+
+    try {
+      const batch = writeBatch(db)
+      for (const entry of orders) {
+        const ref = doc(collection(db, 'tasks'), entry.id)
+        batch.update(ref, { order: entry.order })
+      }
+      await batch.commit()
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Could not save new order.'
+      setError(message)
+    }
+  }
+
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }))
+
+  function handleDragEnd(event: DragEndEvent) {
+    if (!canReorder) return
+    const { active, over } = event
+    if (!over || active.id === over.id) return
+
+    // Reorder only within the currently visible list (no filters/search allowed).
+    const visible = filteredTasks
+    const oldIndex = visible.findIndex((t) => t.id === String(active.id))
+    const newIndex = visible.findIndex((t) => t.id === String(over.id))
+    if (oldIndex < 0 || newIndex < 0) return
+
+    const nextVisible = arrayMove(visible, oldIndex, newIndex)
+
+    // Apply the reordered visible list back onto the full task list.
+    const visibleIds = new Set(nextVisible.map((t) => t.id))
+    const rest = tasks.filter((t) => !visibleIds.has(t.id))
+    void persistReorder([...nextVisible, ...rest])
+  }
+
+  function SortableTaskItem({
+    task,
+    children,
+    disabled,
+    className,
+  }: {
+    task: Task
+    children: ReactNode
+    disabled: boolean
+    className?: string
+  }) {
+    const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+      id: task.id,
+      disabled,
+    })
+    const style: CSSProperties = {
+      transform: CSS.Transform.toString(transform),
+      transition,
+      opacity: isDragging ? 0.65 : 1,
+    }
+    return (
+      <li ref={setNodeRef} style={style} className={className} {...attributes} {...(disabled ? {} : listeners)}>
+        {children}
+      </li>
+    )
   }
 
   const showAdd = mode === 'add' || mode === 'both'
@@ -432,6 +734,8 @@ export function TasksPage({ mode = 'both' }: TasksPageProps) {
 
   return (
     <div className="tasks-shell tasks-shell--tasks">
+      {isOffline && <p className="banner">Offline Mode</p>}
+      {isSyncing && <p className="banner">Syncing…</p>}
       {showAdd && (
         <section className="tasks-panel tasks-form-panel">
           <h2 className="tasks-heading">Add a task</h2>
@@ -489,7 +793,7 @@ export function TasksPage({ mode = 'both' }: TasksPageProps) {
               </label>
 
               <label className="field">
-                <span>Priority</span>
+                <span className='priority-label'>Priority</span>
                 <select value={priority} onChange={(e) => setPriority(e.target.value as Priority)}>
                   <option value="low">Low</option>
                   <option value="medium">Medium</option>
@@ -652,8 +956,16 @@ export function TasksPage({ mode = 'both' }: TasksPageProps) {
                 </table>
               </div>
 
-              <ul className="tasks-card-list">
-                {filteredTasks.map((task) => {
+              {!canReorder && (
+                <p className="tasks-subtitle" style={{ marginTop: 10 }}>
+                  Clear filters/search to drag and reorder tasks.
+                </p>
+              )}
+
+              <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+                <SortableContext items={filteredTasks.map((t) => t.id)} strategy={verticalListSortingStrategy}>
+                  <ul className="tasks-card-list">
+                    {filteredTasks.map((task) => {
                   const isOverdue =
                     !task.completed &&
                     task.due_date !== null &&
@@ -666,53 +978,68 @@ export function TasksPage({ mode = 'both' }: TasksPageProps) {
                   const statusLabel = task.completed ? 'Completed' : isOverdue ? 'Overdue' : 'Pending'
 
                   return (
-                    <li key={task.id} className={`task-item ${task.completed ? 'task-item--done' : ''}`}>
-                      <div className="task-main">
+                    <SortableTaskItem
+                      key={task.id}
+                      task={task}
+                      disabled={!canReorder}
+                      className={`task-item ${task.completed ? 'task-item--done' : ''}`}
+                    >
+                      <div className="task-card-header">
                         <button
                           type="button"
                           className={`task-check ${task.completed ? 'task-check--checked' : ''}`}
                           onClick={() => void toggleCompleted(task)}
                           aria-label={task.completed ? 'Mark as not completed' : 'Mark as completed'}
                         />
-                        <div className="task-text">
-                          <div className="task-title-row">
-                            <span className="task-title">{task.title}</span>
+                        <div className="task-header-text">
+                          <span className="task-title">{task.title}</span>
+                        </div>
+                        <span
+                          className={`task-status task-status--${
+                            task.completed ? 'completed' : isOverdue ? 'overdue' : 'pending'
+                          } task-status--pill`}
+                        >
+                          {statusLabel}
+                        </span>
+                      </div>
+                      <div className="task-card-body">
+                        {task.description && (
+                          <div className="task-card-row task-card-row--description">
+                            <span className="task-card-label">Description</span>
+                            <span className="task-card-value task-card-value--multiline">
+                              {task.description}
+                            </span>
+                          </div>
+                        )}
+                        <div className="task-card-row">
+                          <span className="task-card-label">Category</span>
+                          <span className="task-card-value">{task.category ?? '—'}</span>
+                        </div>
+                        <div className="task-card-row">
+                          <span className="task-card-label">Priority</span>
+                          <span className="task-card-value">
                             {task.priority && (
                               <span className={`task-pill task-pill--${task.priority}`}>{task.priority}</span>
                             )}
-                          </div>
-                          {task.description && <p className="task-description">{task.description}</p>}
-                          <div className="task-meta">
-                            {task.category && <span className="task-meta-category">{task.category}  </span>}
-                            <div className="date">
-                            <span className="task-meta-created">
-                              Created:{' '}
-                              {new Date(task.created_at).toLocaleDateString(undefined, { dateStyle: 'medium' })}
-                            </span>
-                            ---
-                            {task.due_date && (
-                              <>
-                                {'  '}
-                                <span>
-                                  Due{' '}
-                                  {new Date(task.due_date).toLocaleDateString(undefined, { dateStyle: 'medium' })}
-                                </span>
-                              </>
-                            )}
-                            </div>
-                          </div>
-                          <p className="task-meta">
-                            <span
-                              className={`task-status task-status--${
-                                task.completed ? 'completed' : isOverdue ? 'overdue' : 'pending'
-                              }`}
-                            >
-                              {statusLabel}
-                            </span>
-                          </p>
+                          </span>
+                        </div>
+                        <div className="task-card-row">
+                          <span className="task-card-label">Created</span>
+                          <span className="task-card-value">
+                            {new Date(task.created_at).toLocaleDateString(undefined, { dateStyle: 'medium' })}
+                          </span>
+                        </div>
+                        <div className="task-card-row">
+                          <span className="task-card-label">Due</span>
+                          <span className="task-card-value">
+                            {task.due_date
+                              ? new Date(task.due_date).toLocaleDateString(undefined, { dateStyle: 'medium' })
+                              : '—'}
+                          </span>
                         </div>
                       </div>
-                      <div className="task-actions" style={{display: 'flex', alignItems: 'center', gap: '10px'}}>
+
+                      <div className="task-actions" style={{ display: 'flex', alignItems: 'center', gap: '10px', marginTop: '10px' }}>
                         <button
                           type="button"
                           className="task-action-btn"
@@ -721,6 +1048,15 @@ export function TasksPage({ mode = 'both' }: TasksPageProps) {
                           title="Edit task"
                         >
                           <HiOutlinePencilSquare />
+                        </button>
+                        <button
+                          type="button"
+                          className="task-action-btn"
+                          onClick={() => void handleAssign(task)}
+                          disabled={assignSaving && assigningTaskId === task.id}
+                          title={task.assigned_email ? `Assigned to ${task.assigned_email}` : 'Assign task'}
+                        >
+                          {task.assigned_email ? `Assigned: ${task.assigned_email}` : 'Assign'}
                         </button>
                         <button
                           type="button"
@@ -739,10 +1075,12 @@ export function TasksPage({ mode = 'both' }: TasksPageProps) {
                           <HiOutlineTrash />
                         </button>
                       </div>
-                    </li>
+                    </SortableTaskItem>
                   )
-                })}
-              </ul>
+                    })}
+                  </ul>
+                </SortableContext>
+              </DndContext>
             </>
           )}
         </section>
