@@ -1,0 +1,206 @@
+import { useEffect, useState } from 'react'
+import type { Task } from '../types/tasks'
+import { collection, doc, getDoc } from 'firebase/firestore'
+import { db } from '../lib/firebaseClient'
+
+type TaskDetailsModalProps = {
+  task: Task
+  isOwner: boolean
+  onClose: () => void
+  onEdit: (task: Task) => void
+  onToggleComplete: (task: Task) => void
+  onDelete: (task: Task) => void
+  onInviteCollaborator: () => void
+}
+
+export function TaskDetailsModal({
+  task,
+  isOwner,
+  onClose,
+  onEdit,
+  onToggleComplete,
+  onDelete,
+  onInviteCollaborator,
+}: TaskDetailsModalProps) {
+  const [collaboratorLabels, setCollaboratorLabels] = useState<string[] | null>(null)
+  const [collaboratorsLoading, setCollaboratorsLoading] = useState(false)
+
+  useEffect(() => {
+    let isMounted = true
+
+    async function loadCollaborators() {
+      const ids = Array.from(new Set(task.collaborators ?? [])).filter((id) => typeof id === 'string' && id.length > 0)
+      if (ids.length === 0) {
+        if (isMounted) {
+          setCollaboratorLabels([])
+          setCollaboratorsLoading(false)
+        }
+        return
+      }
+
+      setCollaboratorsLoading(true)
+      try {
+        const labels: string[] = []
+        await Promise.all(
+          ids.map(async (uid) => {
+            try {
+              const ref = doc(collection(db, 'profiles'), uid)
+              const snap = await getDoc(ref)
+              if (!snap.exists()) {
+                labels.push(uid)
+                return
+              }
+              const data = snap.data() as { email?: string | null; username?: string | null }
+              labels.push(data.username ?? data.email ?? uid)
+            } catch {
+              labels.push(uid)
+            }
+          }),
+        )
+        if (!isMounted) return
+        setCollaboratorLabels(labels)
+      } finally {
+        if (isMounted) setCollaboratorsLoading(false)
+      }
+    }
+
+    void loadCollaborators()
+
+    return () => {
+      isMounted = false
+    }
+  }, [task.collaborators])
+
+  return (
+    <div className="modal-overlay" role="dialog" aria-modal="true">
+      <div className="modal-card">
+        <h2 className="modal-title">Task details</h2>
+        <p className="modal-subtitle">Review and manage this task.</p>
+
+        <div className="tasks-details">
+          <div className="task-card-row">
+            <span className="task-card-label">Title</span>
+            <span className="task-card-value">{task.title}</span>
+          </div>
+          {task.description && (
+            <div className="task-card-row">
+              <span className="task-card-label">Description</span>
+              <span className="task-card-value task-card-value--multiline">
+                {task.description}
+              </span>
+            </div>
+          )}
+          <div className="task-card-row">
+            <span className="task-card-label">Category</span>
+            <span className="task-card-value">{task.category ?? '—'}</span>
+          </div>
+          <div className="task-card-row">
+            <span className="task-card-label">Priority</span>
+            <span className="task-card-value">
+              <span className={`task-pill task-pill--${task.priority}`}>{task.priority}</span>
+            </span>
+          </div>
+          <div className="task-card-row">
+            <span className="task-card-label">Due date</span>
+            <span className="task-card-value">
+              {task.due_date
+                ? new Date(task.due_date).toLocaleDateString(undefined, { dateStyle: 'medium' })
+                : '—'}
+            </span>
+          </div>
+          <div className="task-card-row">
+            <span className="task-card-label">Created</span>
+            <span className="task-card-value">
+              {new Date(task.created_at).toLocaleDateString(undefined, { dateStyle: 'medium' })}
+            </span>
+          </div>
+          <div className="task-card-row">
+            <span className="task-card-label">Status</span>
+            <span className="task-card-value">
+              <span
+                className={`task-status task-status--${
+                  task.completed ? 'completed' : 'pending'
+                } task-status--pill`}
+              >
+                {task.completed ? 'Completed' : 'Pending'}
+              </span>
+            </span>
+          </div>
+          {task.assigned_email && (
+            <div className="task-card-row">
+              <span className="task-card-label">Assigned email</span>
+              <span className="task-card-value">{task.assigned_email}</span>
+            </div>
+          )}
+          <div className="task-card-row">
+            <span className="task-card-label">Collaborators</span>
+            <span className="task-card-value task-card-value--multiline">
+              {collaboratorsLoading
+                ? 'Loading collaborators…'
+                : collaboratorLabels && collaboratorLabels.length > 0
+                  ? collaboratorLabels.join(', ')
+                  : 'None yet'}
+            </span>
+          </div>
+        </div>
+
+        <div className="tasks-form-actions" style={{ marginTop: 24, justifyContent: 'space-between' }}>
+          <div>
+            {isOwner && (
+              <>
+                <button
+                  type="button"
+                  className="primary-btn"
+                  onClick={() => onEdit(task)}
+                >
+                  Edit task
+                </button>
+                <div
+                  style={{
+                    marginTop: 18,
+                    marginBottom: 10,
+                    display: 'flex',
+                    gap: 8,
+                    flexWrap: 'wrap',
+                    width: '100%',
+                    justifyContent: 'space-between',
+                  }}
+                >
+                  <button
+                    type="button"
+                    className="secondary-btn task-action-btn"
+                    onClick={onInviteCollaborator}
+                  >
+                    Invite collaborator
+                  </button>
+                  <button
+                    type="button"
+                    className="secondary-btn task-action-btn"
+                    onClick={() => onToggleComplete(task)}
+                  >
+                    {task.completed ? 'Undo complete' : 'Mark complete'}
+                  </button>
+                  <button
+                    type="button"
+                    className="task-action-btn task-action-btn--danger"
+                    onClick={() => onDelete(task)}
+                  >
+                    Delete task
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+          <button
+            type="button"
+            className="ghost-btn tasks-cancel-btn"
+            onClick={onClose}
+          >
+            Close
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+

@@ -1216,18 +1216,27 @@
 }
 
 .tasks-form-actions {
+  display: block;
+  gap: 10px;
+  margin-top: 4px;
+}
+.categories-form-actions, .edit-form-actions, .invitation-form-actions {
   display: flex;
   gap: 10px;
   margin-top: 4px;
 }
-
 .tasks-toolbar {
   display: flex;
   align-items: center;
   gap: 10px;
   flex-wrap: wrap;
 }
-
+.task-pill--shared {
+  background: #eef2ff;
+  color: #4f46e5;
+  font-size: 12px;
+  margin-left: 8px;
+}
 .tasks-search {
   flex: 1 1 220px;
 }
@@ -1251,6 +1260,8 @@
   display: flex;
   align-items: center;
   gap: 8px;
+  justify-content: space-between;
+  width: 100%;
 }
 
 .tasks-filters select {
@@ -1271,7 +1282,7 @@
 }
 
 .tasks-table-wrapper {
-  margin-top: 8px;
+  margin-top: 16px;
   border-radius: 12px;
   border: 1px solid rgba(51, 65, 85, 0.9);
   overflow: auto;
@@ -1282,6 +1293,11 @@
   width: 100%;
   border-collapse: collapse;
   font-size: 0.86rem;
+}
+.tasks-table-row.tasks-table-row--clickable{
+  height: 55px;
+  justify-content: space-between;
+  border-top: 1px solid rgba(30, 41, 59, 0.9);
 }
 
 .tasks-table thead {
@@ -1315,9 +1331,14 @@
 }
 
 .tasks-table-actions {
-  display: flex;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
   gap: 4px;
-  justify-content: flex-end;
+}
+.category-table-actions {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 4px;
 }
 
 .task-action-btn {
@@ -1405,7 +1426,15 @@
   flex-direction: column;
   gap: 8px;
 }
-
+.invitation-card-list {
+  list-style: none;
+  margin: 10px 0 0;
+  padding: 0;
+  gap: 8px;
+}
+.invitation-card-list .task-item {
+  margin-top: 15px;
+}
 .tasks-shell--tasks .task-item {
   background: #020617;
   border-radius: 8px;
@@ -1560,12 +1589,6 @@
 
   .tasks-shell--tasks .task-check {
     display: none;
-  }
-
-  .tasks-shell--tasks .task-item {
-    border-bottom: 1px solid #fff;
-    padding-top: 20px;
-    padding: 12px 14px 14px;
   }
 
   .tasks-shell--tasks .tasks-panel {
@@ -1857,7 +1880,6 @@
 .toggle.is-on::after {
   transform: translateX(18px);
   background: #78d957;
-}
 }
 
 /* End of stylesheet */

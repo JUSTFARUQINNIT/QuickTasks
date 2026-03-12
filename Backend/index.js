@@ -5,7 +5,7 @@ import cron from "node-cron"
 
 import authRoutes from "./routes/auth.js"
 import reminderRoutes from "./routes/reminders.js"
-import collaborationRoutes from "./routes/collaboration.js"
+import inviteRoutes from "./routes/invites.js"
 import { sendDailyReminderEmails } from "./services/reminderService.js"
 
 const app = express()
@@ -19,7 +19,7 @@ app.get("/health", (req, res) => {
 
 app.use("/api/auth", authRoutes)
 app.use("/api/reminders", reminderRoutes)
-app.use("/api/collab", collaborationRoutes)
+app.use("/", inviteRoutes)
 
 const PORT = process.env.PORT || 8787
 

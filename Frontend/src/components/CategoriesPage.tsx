@@ -257,7 +257,7 @@ export function CategoriesPage() {
             />
           </label>
 
-          <div className="tasks-form-actions">
+          <div className="categories-form-actions">
             <button type="submit" className="primary-btn" disabled={saving}>
               {saving ? (editing ? 'Saving…' : 'Adding…') : editing ? 'Save category' : 'Add category'}
             </button>
@@ -305,7 +305,7 @@ export function CategoriesPage() {
                   <tr key={category.id}>
                     <td>{category.name}</td>
                     <td>{countsByCategory.get(category.name) ?? 0}</td>
-                    <td className="tasks-table-actions">
+                    <td className="category-table-actions">
                       <button
                         type="button"
                         className="task-action-btn"

@@ -20,6 +20,7 @@ import { ResetPasswordView } from './components/ResetPasswordView'
 import { TasksPage } from './components/TasksPage'
 import { ProfilePage } from './components/ProfilePage'
 import { CategoriesPage } from './components/CategoriesPage'
+import { InvitationsPage } from './components/InvitationsPage'
 
 type TaskSummary = {
   id: string
@@ -547,12 +548,14 @@ function App() {
       ? { label: 'All Tasks', icon: <HiOutlineClipboardDocumentList />, path: '/tasks/all' }
       : currentPath.startsWith('/tasks/add')
         ? { label: 'Add Task', icon: <HiOutlineClipboardDocumentList />, path: '/tasks/add' }
-        : currentPath.startsWith('/categories')
+      : currentPath.startsWith('/categories')
           ? { label: 'Categories', icon: <HiOutlineClipboardDocumentList />, path: '/categories' }
       : currentPath.startsWith('/settings')
         ? { label: 'Profile', icon: <HiOutlineUserCircle />, path: '/settings' }
         : currentPath.startsWith('/notifications')
           ? { label: 'Notifications', icon: <HiOutlineBell />, path: '/notifications' }
+        : currentPath.startsWith('/invitations')
+          ? { label: 'Invitations', icon: <HiOutlineBell />, path: '/invitations' }
           : { label: 'Dashboard', icon: <HiOutlineHome />, path: '/dashboard' }
 
   return (
@@ -621,6 +624,18 @@ function App() {
                 <HiOutlineClipboardDocumentList />
               </span>
               <span className="sidebar-label">Categories</span>
+            </NavLink>
+            <NavLink
+              to="/invitations"
+              className={({ isActive }) => `sidebar-nav-link ${isActive ? 'is-active' : ''}`}
+              onClick={() => {
+                if (window.innerWidth <= 640) setIsSidebarCollapsed(true)
+              }}
+            >
+              <span className="sidebar-icon">
+                <HiOutlineBell />
+              </span>
+              <span className="sidebar-label">Invitations</span>
             </NavLink>
             <NavLink
               to="/notifications"
@@ -713,6 +728,7 @@ function App() {
             <Route path="/categories" element={<CategoriesPage />} />
             <Route path="/settings" element={<ProfilePage />} />
             <Route path="/notifications" element={<NotificationsPage />} />
+            <Route path="/invitations" element={<InvitationsPage />} />
             <Route path="*" element={<Navigate to="/dashboard" replace />} />
           </Routes>
         </main>
