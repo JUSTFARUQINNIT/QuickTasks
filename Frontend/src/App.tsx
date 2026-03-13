@@ -14,7 +14,7 @@ import {
   where,
 } from 'firebase/firestore'
 import { Bar, BarChart, CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
-import { HiOutlineBell, HiOutlineClipboardDocumentList, HiOutlineCog6Tooth, HiOutlineHome, HiOutlineUserCircle } from 'react-icons/hi2'
+import { HiOutlineBell, HiOutlineClipboardDocumentList, HiOutlineHome, HiOutlineUserCircle } from 'react-icons/hi2'
 import { AuthView } from './components/AuthView'
 import { ResetPasswordView } from './components/ResetPasswordView'
 import { TasksPage } from './components/TasksPage'
