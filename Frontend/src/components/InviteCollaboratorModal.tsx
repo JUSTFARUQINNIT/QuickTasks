@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react'
+import { useEffect, useState, type FormEvent } from 'react'
 import { collection, query, where, getDocs, addDoc, serverTimestamp } from 'firebase/firestore'
 import { auth, db } from '../lib/firebaseClient'
 import type { Task } from '../types/tasks'
@@ -13,6 +13,17 @@ export function InviteCollaboratorModal({ task, onClose }: InviteCollaboratorMod
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!error && !success) return
+    const timeoutId = window.setTimeout(() => {
+      setError(null)
+      setSuccess(null)
+    }, 4000)
+    return () => {
+      window.clearTimeout(timeoutId)
+    }
+  }, [error, success])
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault()

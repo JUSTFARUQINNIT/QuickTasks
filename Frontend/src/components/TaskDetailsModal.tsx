@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react'
 import type { Task } from '../types/tasks'
 import { collection, doc, getDoc } from 'firebase/firestore'
-import { db } from '../lib/firebaseClient'
+import { auth, db } from '../lib/firebaseClient'
 
 type TaskDetailsModalProps = {
   task: Task
+  // When false, the task is shown in read-only mode (collaborator view).
   isOwner: boolean
   onClose: () => void
   onEdit: (task: Task) => void
@@ -24,6 +25,9 @@ export function TaskDetailsModal({
 }: TaskDetailsModalProps) {
   const [collaboratorLabels, setCollaboratorLabels] = useState<string[] | null>(null)
   const [collaboratorsLoading, setCollaboratorsLoading] = useState(false)
+  const currentUserId = auth.currentUser?.uid ?? null
+  const isSelfCollaborator =
+    !!currentUserId && Array.isArray(task.collaborators) && task.collaborators.includes(currentUserId)
 
   useEffect(() => {
     let isMounted = true
@@ -142,11 +146,19 @@ export function TaskDetailsModal({
                   : 'None yet'}
             </span>
           </div>
+          {!isOwner && (task.isInvited || isSelfCollaborator) && (
+            <div className="task-card-row">
+              <span className="task-card-label" />
+              <span className="task-card-value">
+                You are a collaborator on this task.
+              </span>
+            </div>
+          )}
         </div>
 
         <div className="tasks-form-actions" style={{ marginTop: 24, justifyContent: 'space-between' }}>
           <div>
-            {isOwner && (
+            {isOwner ? (
               <>
                 <button
                   type="button"
@@ -189,7 +201,15 @@ export function TaskDetailsModal({
                   </button>
                 </div>
               </>
-            )}
+            ) : task.isInvited ? (
+              <button
+                type="button"
+                className="primary-btn"
+                onClick={() => onToggleComplete(task)}
+              >
+                {task.completed ? 'Mark as not done' : 'Mark as done'}
+              </button>
+            ) : null}
           </div>
           <button
             type="button"

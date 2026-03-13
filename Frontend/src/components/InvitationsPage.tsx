@@ -9,6 +9,9 @@ import {
   getDoc,
   updateDoc,
   arrayUnion,
+  addDoc,
+  serverTimestamp,
+  setDoc,
 } from 'firebase/firestore'
 import { auth, db } from '../lib/firebaseClient'
 
@@ -209,12 +212,66 @@ export function InvitationsPage() {
       setActioningId(invite.id)
       setError(null)
 
+      const currentUser = auth.currentUser
+      if (!currentUser) {
+        throw new Error('You must be signed in to accept invitations.')
+      }
+
       await updateDoc(doc(db, 'taskInvites', invite.id), {
         status: 'accepted',
       })
 
+      // Keep collaborators on the master task for backwards compatibility / analytics.
       await updateDoc(doc(db, 'tasks', invite.taskId), {
-        collaborators: arrayUnion(invite.invitedUserId),
+        collaborators: arrayUnion(currentUser.uid),
+      })
+
+      // Load the master task so we can create a per-user projection with a stable snapshot.
+      const masterRef = doc(db, 'tasks', invite.taskId)
+      const masterSnap = await getDoc(masterRef)
+      if (!masterSnap.exists()) {
+        throw new Error('The shared task no longer exists.')
+      }
+      const masterData = masterSnap.data() as {
+        title?: string
+        description?: string | null
+        due_date?: string | null
+        priority?: string
+        category?: string | null
+        created_at?: string
+        order?: number
+        user_id?: string
+      }
+
+      // Create / overwrite the invited user's projection:
+      // userTasks/{invitedUserId}/tasks/{taskId}
+      const userTaskRef = doc(collection(db, 'userTasks', currentUser.uid, 'tasks'), invite.taskId)
+      await setDoc(userTaskRef, {
+        ref: invite.taskId,
+        isInvited: true,
+        userId: currentUser.uid,
+        ownerId: masterData.user_id ?? invite.invitedBy,
+        title: masterData.title ?? invite.taskTitle,
+        description: masterData.description ?? null,
+        due_date: masterData.due_date ?? null,
+        priority: masterData.priority ?? 'medium',
+        category: masterData.category ?? null,
+        created_at: masterData.created_at ?? new Date().toISOString(),
+        order: typeof masterData.order === 'number' ? masterData.order : 0,
+        completed: false,
+        updatedAt: serverTimestamp(),
+      })
+
+      // Notify the task owner that this invite was accepted.
+      await addDoc(collection(db, 'notifications'), {
+        userId: invite.invitedBy,
+        type: 'inviteAccepted',
+        taskId: invite.taskId,
+        taskTitle: invite.taskTitle,
+        collaboratorId: currentUser.uid,
+        collaboratorEmail: currentUser.email ?? null,
+        createdAt: serverTimestamp(),
+        read: false,
       })
 
       setReceivedInvites((prev) => prev.filter((i) => i.id !== invite.id))

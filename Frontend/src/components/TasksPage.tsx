@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { CSSProperties, FormEvent, ReactNode } from 'react'
-import { HiOutlinePencilSquare, HiOutlineTrash } from 'react-icons/hi2'
 import { auth, db } from '../lib/firebaseClient'
 import type { Priority, Task } from '../types/tasks'
 import { TaskDetailsModal } from './TaskDetailsModal'
@@ -18,13 +17,15 @@ import { CSS } from '@dnd-kit/utilities'
 import {
   addDoc,
   collection,
+  deleteDoc,
   doc,
   getDocs,
+  onSnapshot,
   orderBy,
   query,
+  serverTimestamp,
   updateDoc,
   where,
-  deleteDoc,
   writeBatch,
 } from 'firebase/firestore'
 import { enqueueOfflineAction, readCachedTasks, readOfflineQueue, writeCachedTasks, writeOfflineQueue } from '../lib/offlineTasks'
@@ -52,6 +53,97 @@ export function TasksPage({ mode = 'both' }: TasksPageProps) {
   const [isSyncing, setIsSyncing] = useState(false)
   const syncInFlight = useRef(false)
 
+  async function fetchTasksForCurrentUser(): Promise<Array<{ id: string; data: Record<string, unknown> }>> {
+    const user = auth.currentUser
+    if (!user) return []
+
+    const tasksRef = collection(db, 'tasks')
+
+    // Owner tasks: (user_id == auth.uid)
+    // We don't apply orderBy here to avoid requiring a composite index;
+    // tasks are sorted by `order` on the client side after merging.
+    const ownerQuery = query(tasksRef, where('user_id', '==', user.uid))
+
+    // Collaborator tasks (legacy shared model): (collaborators array contains auth.uid)
+    // Prefer ordered query, but this often needs a composite index; fall back to a temporary query without orderBy.
+    const collaboratorQueryOrdered = query(
+      tasksRef,
+      where('collaborators', 'array-contains', user.uid),
+      orderBy('order', 'asc'),
+    )
+    const collaboratorQueryTempNoOrderBy = query(tasksRef, where('collaborators', 'array-contains', user.uid))
+
+    // Invited tasks (projection model): stored under userTasks/{userId}/tasks/{taskId}
+    const invitedTasksQuery = collection(db, 'userTasks', user.uid, 'tasks')
+
+    const [ownerSnap, invitedSnap] = await Promise.all([
+      getDocs(ownerQuery),
+      getDocs(invitedTasksQuery),
+    ])
+
+    let collaboratorDocs: Array<{ id: string; data: () => Record<string, unknown> }> = []
+    try {
+      const collaboratorSnapOrdered = await getDocs(collaboratorQueryOrdered)
+      collaboratorDocs = collaboratorSnapOrdered.docs as Array<{ id: string; data: () => Record<string, unknown> }>
+    } catch (err) {
+      const code = (err as { code?: unknown } | null)?.code
+      if (code === 'permission-denied') {
+        console.error(
+          '[TasksPage] Collaborator query denied by Firestore rules. This usually means your published rules are not applied to the project your app is using, or the tasks are not actually storing collaborator UIDs in `collaborators`.',
+          err,
+        )
+        // Don’t fail the entire page; continue without collaborator tasks.
+        collaboratorDocs = []
+      } else {
+        console.warn(
+          '[TasksPage] Collaborator ordered query failed (likely missing composite index). Falling back to temporary query without orderBy.',
+          err,
+        )
+        const collaboratorSnapTemp = await getDocs(collaboratorQueryTempNoOrderBy)
+        collaboratorDocs = collaboratorSnapTemp.docs as Array<{ id: string; data: () => Record<string, unknown> }>
+      }
+    }
+
+    const merged = new Map<string, { id: string; data: Record<string, unknown> }>()
+
+    // Master tasks owned by the current user.
+    for (const d of ownerSnap.docs) {
+      merged.set(d.id, { id: d.id, data: d.data() as Record<string, unknown> })
+    }
+
+    // Legacy collaborator tasks.
+    for (const d of collaboratorDocs) {
+      if (!merged.has(d.id)) {
+        merged.set(d.id, { id: d.id, data: d.data() as Record<string, unknown> })
+      }
+    }
+
+    // Invited task projections (userTasks/{userId}/tasks/...).
+    for (const d of invitedSnap.docs) {
+      const data = d.data() as Record<string, unknown>
+      const refId = (data.ref as string | undefined) ?? d.id
+      if (merged.has(refId)) continue
+      merged.set(refId, {
+        id: refId,
+        data: {
+          ...data,
+          // Ensure we can detect these as invited tasks in the UI.
+          isInvited: true,
+          ref: refId,
+        },
+      })
+    }
+
+    const combined = Array.from(merged.values()).sort((a, b) => {
+      const ao = typeof a.data.order === 'number' ? (a.data.order as number) : 0
+      const bo = typeof b.data.order === 'number' ? (b.data.order as number) : 0
+      return ao - bo
+    })
+
+    console.log('[TasksPage] fetched tasks for', user.uid, combined)
+    return combined
+  }
+
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
   const [dueDate, setDueDate] = useState('')
@@ -67,6 +159,7 @@ export function TasksPage({ mode = 'both' }: TasksPageProps) {
   const [availableCategories, setAvailableCategories] = useState<string[]>([])
   const [selectedTask, setSelectedTask] = useState<Task | null>(null)
   const [showInviteModal, setShowInviteModal] = useState(false)
+  const invitedTaskUnsubscribeRef = useRef<null | (() => void)>(null)
 
   const hasTasks = tasks.length > 0
 
@@ -120,61 +213,33 @@ export function TasksPage({ mode = 'both' }: TasksPageProps) {
           setLoading(false)
           return
         }
+        
 
-        const ownTasksQuery = query(
-          collection(db, 'tasks'),
-          where('user_id', '==', user.uid),
-          orderBy('order', 'asc'),
-        )
-        const legacyOwnTasksQuery = query(
-          collection(db, 'tasks'),
-          where('user_id', '==', user.uid),
-          orderBy('created_at', 'desc'),
-        )
-        const collaboratorTasksQuery = query(
-          collection(db, 'tasks'),
-          where('collaborators', 'array-contains', user.uid),
-        )
         const categoriesQuery = query(
           collection(db, 'categories'),
           where('user_id', '==', user.uid),
           orderBy('created_at', 'asc'),
         )
 
-        const [ownTasksSnapshot, collaboratorTasksSnapshot, categoriesSnapshot] = await Promise.all([
-          (async () => {
-            try {
-              return await getDocs(ownTasksQuery)
-            } catch {
-              // Backward compatible: if the composite index for (user_id, order) is missing,
-              // fall back to created_at so the page still loads.
-              return await getDocs(legacyOwnTasksQuery)
-            }
-          })(),
-          getDocs(collaboratorTasksQuery),
-          getDocs(categoriesQuery),
-        ])
+        // Fetch tasks for the signed-in user (owner + collaborator).
+        // This merges both result sets and sorts by `order` ascending.
+        const [fetchedTasks, categoriesSnapshot] = await Promise.all([fetchTasksForCurrentUser(), getDocs(categoriesQuery)])
 
         if (!isMounted) return
 
-        const ownTaskData = ownTasksSnapshot.docs.map((d) => ({ 
-          id: d.id,
-          ...(d.data() as Omit<Task, 'id'>), 
-          shared: false,
-        }))
-        const collaboratorTaskData = collaboratorTasksSnapshot.docs.map((d) => ({
-          id: d.id,
-          ...(d.data() as Omit<Task, 'id'>),
-          shared: true,
-        }))
-        const allTaskDataMap = new Map<string, Task>()
-        for (const t of ownTaskData as Task[]) {
-          allTaskDataMap.set(t.id, t)
-        }
-        for (const t of collaboratorTaskData as Task[]) {
-          allTaskDataMap.set(t.id, t)
-        }
-        const taskData = Array.from(allTaskDataMap.values())
+        // Mark owned tasks vs shared tasks for UI (e.g. read-only for collaborators).
+        const taskData: Task[] = fetchedTasks.map(({ id, data }) => {
+          const ownerId = typeof data.user_id === 'string' ? (data.user_id as string) : null
+          const isInvited = data.isInvited === true
+          return {
+            id,
+            ...(data as Omit<Task, 'id'>),
+            shared: ownerId !== user.uid,
+            ownerId: ownerId,
+            isInvited,
+            ref: (data.ref as string | undefined) ?? id,
+          }
+        })
         const categoryData = categoriesSnapshot.docs.map((d) => d.data() as { name?: string | null })
 
         const hasAnyMissingOrder = (taskData as Array<Record<string, unknown>>).some((t) => typeof t.order !== 'number')
@@ -183,7 +248,7 @@ export function TasksPage({ mode = 'both' }: TasksPageProps) {
           ...t,
           order: typeof t.order === 'number' ? t.order : 0,
         }))
-
+        console.log('Loaded tasks for', user.uid, taskData.map((t) => ({ id: t.id, title: t.title, shared: t.shared })))
         const nextTasks = hasAnyMissingOrder
           ? // First-time migration: preserve existing behavior (newest first) by assigning
             // a sequential order based on created_at descending.
@@ -229,6 +294,108 @@ export function TasksPage({ mode = 'both' }: TasksPageProps) {
       isMounted = false
     }
   }, [])
+
+  // When an invited task is opened, listen for real-time updates on the master task
+  // and mirror those fields into the projection + UI.
+  useEffect(() => {
+    const current = selectedTask
+    const user = auth.currentUser
+
+    // Clean up any previous listener.
+    if (invitedTaskUnsubscribeRef.current) {
+      invitedTaskUnsubscribeRef.current()
+      invitedTaskUnsubscribeRef.current = null
+    }
+
+    if (!current || !current.isInvited || !user) {
+      return
+    }
+
+    const masterId = current.ref ?? current.id
+
+    const masterRef = doc(db, 'tasks', masterId)
+    const unsubscribe = onSnapshot(masterRef, async (snap) => {
+      if (!snap.exists()) {
+        return
+      }
+      const data = snap.data() as {
+        title?: string
+        description?: string | null
+        due_date?: string | null
+        priority?: string
+        category?: string | null
+        created_at?: string
+        order?: number
+        user_id?: string
+      }
+
+      setTasks((prev) =>
+        prev.map((t) =>
+          t.id === current.id
+            ? {
+                ...t,
+                title: data.title ?? t.title,
+                description: data.description ?? t.description,
+                due_date: data.due_date ?? t.due_date,
+                priority: (data.priority as Priority | undefined) ?? t.priority,
+                category: data.category ?? t.category,
+                created_at: data.created_at ?? t.created_at,
+                order: typeof data.order === 'number' ? data.order : t.order,
+                ownerId: data.user_id ?? t.ownerId ?? null,
+                isInvited: true,
+                ref: masterId,
+              }
+            : t,
+        ),
+      )
+
+      setSelectedTask((prev) =>
+        prev && prev.id === current.id
+          ? {
+              ...prev,
+              title: data.title ?? prev.title,
+              description: data.description ?? prev.description,
+              due_date: data.due_date ?? prev.due_date,
+              priority: (data.priority as Priority | undefined) ?? prev.priority,
+              category: data.category ?? prev.category,
+              created_at: data.created_at ?? prev.created_at,
+              order: typeof data.order === 'number' ? data.order : prev.order,
+              ownerId: data.user_id ?? prev.ownerId ?? null,
+              isInvited: true,
+              ref: masterId,
+            }
+          : prev,
+      )
+
+      // Optionally mirror the latest master fields into the invited user's projection
+      // so they are available offline.
+      try {
+        const invitedRef = doc(collection(db, 'userTasks', user.uid, 'tasks'), masterId)
+        await updateDoc(invitedRef, {
+          title: data.title ?? current.title,
+          description: data.description ?? current.description ?? null,
+          due_date: data.due_date ?? current.due_date ?? null,
+          priority: data.priority ?? current.priority,
+          category: data.category ?? current.category ?? null,
+          created_at: data.created_at ?? current.created_at,
+          order: typeof data.order === 'number' ? data.order : current.order,
+          ownerId: data.user_id ?? current.ownerId ?? null,
+          updatedAt: serverTimestamp(),
+        })
+      } catch (err) {
+        console.warn('[TasksPage] Failed to mirror master task into userTasks projection', err)
+      }
+    })
+
+    invitedTaskUnsubscribeRef.current = unsubscribe
+
+    return () => {
+      if (invitedTaskUnsubscribeRef.current) {
+        invitedTaskUnsubscribeRef.current()
+        invitedTaskUnsubscribeRef.current = null
+      }
+    }
+  }, [selectedTask])
 
   useEffect(() => {
     try {
@@ -383,6 +550,7 @@ export function TasksPage({ mode = 'both' }: TasksPageProps) {
         created_at: nowIso,
         completed: false,
         order: nextOrder,
+        collaborators: [],
       }
 
       if (!navigator.onLine) {
@@ -403,6 +571,7 @@ export function TasksPage({ mode = 'both' }: TasksPageProps) {
             created_at: nowIso,
             completed: false,
             order: nextOrder,
+            collaborators: [],
           },
           ...prev,
         ])
@@ -422,6 +591,8 @@ export function TasksPage({ mode = 'both' }: TasksPageProps) {
             created_at: nowIso,
             completed: false,
             order: nextOrder,
+            collaborators: [],
+            user_id: user.uid,
           },
           ...prev,
         ])
@@ -557,7 +728,20 @@ export function TasksPage({ mode = 'both' }: TasksPageProps) {
       }
 
       if (!navigator.onLine) {
-        enqueueOfflineAction({ type: 'update', payload: { id: task.id, updates } })
+        // Offline queue currently only supports master tasks. For invited tasks we
+        // update local state only; the projection will be corrected on the next load.
+        if (!task.isInvited) {
+          enqueueOfflineAction({ type: 'update', payload: { id: task.id, updates } })
+        }
+      } else if (task.isInvited) {
+        const user = auth.currentUser
+        if (!user) throw new Error('You must be signed in to update shared tasks.')
+        const invitedRef = doc(collection(db, 'userTasks', user.uid, 'tasks'), task.ref ?? task.id)
+        await updateDoc(invitedRef, {
+          completed: updates.completed,
+          completed_at: updates.completed_at,
+          updatedAt: serverTimestamp(),
+        })
       } else {
         const ref = doc(collection(db, 'tasks'), task.id)
         await updateDoc(ref, updates)

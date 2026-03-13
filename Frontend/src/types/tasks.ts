@@ -16,5 +16,23 @@ export type Task = {
   assigned_email?: string | null
   created_by?: string | null
   collaborators?: string[]
+  /**
+   * Owner UID for the master task (from `tasks/{taskId}.user_id`).
+   * For invited tasks this is the original owner; for owned tasks it matches the current user.
+   */
+  ownerId?: string | null
+  /**
+   * True when this task is a projection of another user's task that was shared via an invite.
+   */
+  isInvited?: boolean
+  /**
+   * Reference ID of the original task document in `tasks/{taskId}`.
+   * For invited tasks this is the master task ID; for owned tasks it may be undefined.
+   */
+  ref?: string | null
+  /**
+   * Last time the projection was updated from the master task, as ISO string.
+   */
+  updatedAt?: string | null
 }
 
