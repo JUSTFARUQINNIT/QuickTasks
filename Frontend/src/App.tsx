@@ -178,14 +178,30 @@ function DashboardOverview() {
           return
         }
 
-        const q = query(
+        const ownedQuery = query(
           collection(db, 'tasks'),
           where('user_id', '==', user.uid),
         )
-        const snapshot = await getDocs(q)
+        const invitedQuery = collection(db, 'userTasks', user.uid, 'tasks')
+
+        const [ownedSnap, invitedSnap] = await Promise.all([
+          getDocs(ownedQuery),
+          getDocs(invitedQuery),
+        ])
         if (!isMounted) return
-        const data = snapshot.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<TaskSummary, 'id'>) }))
-        setTasks(data as TaskSummary[])
+
+        const owned = ownedSnap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<TaskSummary, 'id'>) }))
+        const invited = invitedSnap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<TaskSummary, 'id'>) }))
+
+        // Merge by ID so a task that the user both owns and has an invited projection for
+        // is only counted once.
+        const byId = new Map<string, TaskSummary>()
+        for (const t of owned as TaskSummary[]) byId.set(t.id, t)
+        for (const t of invited as TaskSummary[]) {
+          if (!byId.has(t.id)) byId.set(t.id, t)
+        }
+
+        setTasks(Array.from(byId.values()))
       } catch (err) {
         const message = err instanceof Error ? err.message : 'Could not load dashboard stats.'
         if (!isMounted) return

@@ -242,7 +242,19 @@ export function TasksPage({ mode = 'both' }: TasksPageProps) {
         })
         const categoryData = categoriesSnapshot.docs.map((d) => d.data() as { name?: string | null })
 
-        const hasAnyMissingOrder = (taskData as Array<Record<string, unknown>>).some((t) => typeof t.order !== 'number')
+        // Track the original `order` value so we only write back changes that
+        // actually need migration, rather than updating every task document.
+        const originalOrderById = new Map<string, number | null>()
+        for (const t of taskData as Task[]) {
+          originalOrderById.set(
+            t.id,
+            typeof t.order === 'number' ? (t.order as number) : null,
+          )
+        }
+
+        const hasAnyMissingOrder = (taskData as Array<Record<string, unknown>>).some(
+          (t) => typeof (t as Task).order !== 'number',
+        )
 
         const normalizedTasks = (taskData as Task[]).map((t) => ({
           ...t,
@@ -269,15 +281,38 @@ export function TasksPage({ mode = 'both' }: TasksPageProps) {
           ).sort((a, b) => a.localeCompare(b)),
         )
 
-        // Persist missing `order` fields so future fetches are stable + sortable.
-        // (Firestore will happily sort missing fields, but the ordering is not user-friendly or stable.)
+        // Persist `order` only for tasks that either:
+        // - previously had no numeric `order`, or
+        // - now have a different `order` value than before.
+        // This dramatically reduces the number of writes and helps avoid
+        // exhausting Firestore write quotas on large task lists.
         if (hasAnyMissingOrder) {
-          const batch = writeBatch(db)
-          for (const task of nextTasks) {
-            const ref = doc(collection(db, 'tasks'), task.id)
-            batch.update(ref, { order: task.order })
+          const tasksNeedingOrderUpdate = nextTasks.filter((task) => {
+            const original = originalOrderById.get(task.id)
+            if (typeof original !== 'number') return true
+            return original !== task.order
+          })
+
+          if (tasksNeedingOrderUpdate.length > 0) {
+            try {
+              const batch = writeBatch(db)
+              for (const task of tasksNeedingOrderUpdate) {
+                const ref = doc(collection(db, 'tasks'), task.id)
+                batch.update(ref, { order: task.order })
+              }
+              await batch.commit()
+            } catch (err) {
+              const code = (err as { code?: unknown } | null)?.code
+              if (code === 'resource-exhausted') {
+                console.warn(
+                  '[TasksPage] Skipped order migration writes due to Firestore resource-exhausted quota.',
+                  err,
+                )
+              } else {
+                console.warn('[TasksPage] Failed to persist order migration to Firestore.', err)
+              }
+            }
           }
-          await batch.commit()
         }
       } catch (err) {
         const message = err instanceof Error ? err.message : 'Could not load tasks.'
@@ -315,7 +350,18 @@ export function TasksPage({ mode = 'both' }: TasksPageProps) {
 
     const masterRef = doc(db, 'tasks', masterId)
     const unsubscribe = onSnapshot(masterRef, async (snap) => {
+      // If the owner deletes the master task, remove it from the collaborator's view
+      // and clean up their projection document.
       if (!snap.exists()) {
+        setTasks((prev) => prev.filter((t) => t.id !== current.id))
+        setSelectedTask((prev) => (prev && prev.id === current.id ? null : prev))
+
+        try {
+          const invitedRef = doc(collection(db, 'userTasks', user.uid, 'tasks'), masterId)
+          await deleteDoc(invitedRef)
+        } catch (err) {
+          console.warn('[TasksPage] Failed to delete userTasks projection after master delete', err)
+        }
         return
       }
       const data = snap.data() as {
@@ -1061,11 +1107,11 @@ export function TasksPage({ mode = 'both' }: TasksPageProps) {
                         >
                           <td>
                             <div className="tasks-table-title">
-                              <span>
-                                {task.title}
-                                {task.shared && (
+                              {task.shared && (
                                   <span className="task-pill task-pill--shared">Shared</span>
                                 )}
+                              <span>
+                                {task.title}
                                 </span>
                             </div>
                           </td>
@@ -1131,14 +1177,9 @@ export function TasksPage({ mode = 'both' }: TasksPageProps) {
                         style={{ all: 'unset', cursor: 'pointer', display: 'block', width: '100%' }}
                       >
                         <div className="task-card-header">
-                          <div className="task-header-text">
-                            <span className="task-title">
-                              {task.title}
-                            {task.shared && (
+                        {task.shared && (
                               <span className="task-pill task-pill--shared">Shared</span>
                             )}
-                            </span>
-                          </div>
                           <span
                             className={`task-status task-status--${
                               task.completed ? 'completed' : isOverdue ? 'overdue' : 'pending'
@@ -1147,6 +1188,12 @@ export function TasksPage({ mode = 'both' }: TasksPageProps) {
                             {statusLabel}
                           </span>
                         </div>
+                        <div className="task-header-text">
+                            <span className="task-title">
+                              {task.title}
+                            
+                            </span>
+                          </div>
                         <div className="task-card-body">
                           {task.description && (
                             <div className="task-card-row task-card-row--description">
@@ -1182,6 +1229,7 @@ export function TasksPage({ mode = 'both' }: TasksPageProps) {
                                 : '—'}
                             </span>
                           </div>
+                          
                         </div>
                       </button>
                     </SortableTaskItem>

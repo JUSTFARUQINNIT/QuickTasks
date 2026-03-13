@@ -1214,7 +1214,11 @@
 .tasks-form-row .field {
   flex: 1;
 }
-
+.collaborator-form-actions{
+  display: flex;
+  gap: 10px;
+  margin-top: 4px;
+}
 .tasks-form-actions {
   display: block;
   gap: 10px;
@@ -1232,10 +1236,15 @@
   flex-wrap: wrap;
 }
 .task-pill--shared {
-  background: #eef2ff;
-  color: #4f46e5;
   font-size: 12px;
-  margin-left: 8px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: #052e16;
+  color: #fff;
+  font-weight: 500;
+  width: fit-content;
+  margin-left: -3px;
+  margin-top: 2px;
 }
 .tasks-search {
   flex: 1 1 220px;
@@ -1601,7 +1610,8 @@
 
 .tasks-shell--tasks .task-header-text {
   font-weight: 700;
-  font-size: 25px;
+  font-size: 16px;
+  margin-top: 5px;
 }
 }
 @media (max-width: 675px) {
