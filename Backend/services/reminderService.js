@@ -1,4 +1,4 @@
-import { adminDb } from "../utils/firebase.js";
+import { adminAuth, adminDb } from "../utils/firebase.js";
 import { mailTransport } from "../utils/mailer.js";
 
 /** Escape HTML to prevent XSS when embedding task content in emails. */
@@ -72,9 +72,34 @@ function buildDailyReminderHtml(todayStr, tasks) {
 }
 
 /**
+ * Resolve email for a task owner: use user_email if set, else look up by user_id via Firebase Auth.
+ * @param {Record<string, unknown>} data - Task document
+ * @param {Map<string, string>} uidToEmail - Cache of uid -> email from Auth
+ * @returns {Promise<string|null>}
+ */
+async function getEmailForTask(data, uidToEmail) {
+  const existing = (data.user_email || "").trim().toLowerCase();
+  if (existing && existing.includes("@")) return existing;
+  const uid = data.user_id;
+  if (!uid || typeof uid !== "string") return null;
+  if (uidToEmail.has(uid)) return uidToEmail.get(uid);
+  try {
+    const userRecord = await adminAuth.getUser(uid);
+    const email = (userRecord.email || "").trim().toLowerCase();
+    if (email && email.includes("@")) {
+      uidToEmail.set(uid, email);
+      return email;
+    }
+  } catch {
+    // User deleted or not found
+  }
+  return null;
+}
+
+/**
  * Send one daily reminder email per user, each containing all their uncompleted tasks due today.
- * Uses server local date for "today". Errors for one user are logged; others still receive emails.
- * @returns {{ usersEmailed: number, usersSkipped: number, tasksTotal: number }}
+ * Uses server UTC date for "today". Resolves owner email from user_id via Firebase Auth if user_email is missing.
+ * @returns {{ usersEmailed: number, usersSkipped: number, tasksTotal: number, date: string }}
  */
 export async function sendDailyReminderEmails() {
   const today = new Date();
@@ -93,17 +118,18 @@ export async function sendDailyReminderEmails() {
       .get();
 
     if (snapshot.empty) {
-      console.log("Daily reminders: no tasks due today.");
-      return { usersEmailed: 0, usersSkipped: 0, tasksTotal: 0 };
+      console.log(`Daily reminders: no tasks due today (${todayStr}).`);
+      return { usersEmailed: 0, usersSkipped: 0, tasksTotal: 0, date: todayStr };
     }
 
-    // Group tasks by user_email
+    /** @type {Map<string, string>} uid -> email cache */
+    const uidToEmail = new Map();
     /** @type {Map<string, { title?: string, description?: string }[]>} */
     const byUser = new Map();
 
     for (const doc of snapshot.docs) {
       const data = doc.data();
-      const email = (data.user_email || "").trim().toLowerCase();
+      const email = await getEmailForTask(data, uidToEmail);
       if (!email || !email.includes("@")) continue;
       if (!byUser.has(email)) {
         byUser.set(email, []);
@@ -113,6 +139,13 @@ export async function sendDailyReminderEmails() {
         description: data.description,
       });
       tasksTotal += 1;
+    }
+
+    if (byUser.size === 0) {
+      console.log(
+        `Daily reminders: ${snapshot.size} tasks due ${todayStr} but no owner emails could be resolved (check user_id / Auth).`
+      );
+      return { usersEmailed: 0, usersSkipped: 0, tasksTotal: 0, date: todayStr };
     }
 
     const from =
@@ -142,11 +175,11 @@ export async function sendDailyReminderEmails() {
     }
 
     console.log(
-      `Daily reminders: ${usersEmailed} users emailed, ${usersSkipped} skipped, ${tasksTotal} tasks total.`
+      `Daily reminders (${todayStr}): ${usersEmailed} users emailed, ${usersSkipped} failed, ${tasksTotal} tasks.`
     );
-    return { usersEmailed, usersSkipped, tasksTotal };
+    return { usersEmailed, usersSkipped, tasksTotal, date: todayStr };
   } catch (error) {
     console.error("Failed to load tasks for daily reminders", error);
-    return { usersEmailed: 0, usersSkipped: 0, tasksTotal: 0 };
+    return { usersEmailed: 0, usersSkipped: 0, tasksTotal: 0, date: todayStr };
   }
 }
