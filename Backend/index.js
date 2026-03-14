@@ -1,12 +1,10 @@
 import "dotenv/config"
 import express from "express"
 import cors from "cors"
-import cron from "node-cron"
 
 import authRoutes from "./routes/auth.js"
 import reminderRoutes from "./routes/reminders.js"
 import inviteRoutes from "./routes/invites.js"
-import { sendDailyReminderEmails } from "./services/reminderService.js"
 
 const app = express()
 
@@ -25,9 +23,5 @@ const PORT = process.env.PORT || 8787
 
 app.listen(PORT, () => {
   console.log(`Server running on ${PORT}`)
-
-  cron.schedule("0 8 * * *", () => {
-    console.log("Running scheduled reminders...")
-    sendDailyReminderEmails()
-  })
+  // Daily reminders run via external cron (e.g. cron-job.org) hitting POST/GET /api/reminders/send-daily with CRON_SECRET.
 })

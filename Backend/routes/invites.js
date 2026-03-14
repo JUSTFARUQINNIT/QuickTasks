@@ -13,7 +13,9 @@ router.post("/send-task-invite-email", async (req, res) => {
       })
     }
 
-    const from = process.env.MAIL_FROM ?? `QuickTasks <${process.env.EMAIL_USER}>`
+    const from =
+      process.env.MAIL_FROM ??
+      `QuickTasks <${process.env.MAIL_FROM_EMAIL || process.env.EMAIL_USER || "noreply@quicktasks.local"}>`
     const appUrl = process.env.APP_URL ?? "https://quick-tasks-ochre.vercel.app/"
 
     const safeTaskTitle = String(taskTitle)

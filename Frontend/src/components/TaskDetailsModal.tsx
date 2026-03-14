@@ -320,7 +320,6 @@ export function TaskDetailsModal({
           </button>
         </div>
       </div>
-      //{" "}
     </div>
   );
 }

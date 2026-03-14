@@ -1,11 +1,89 @@
 import { adminDb } from "../utils/firebase.js";
 import { mailTransport } from "../utils/mailer.js";
 
+/** Escape HTML to prevent XSS when embedding task content in emails. */
+function escapeHtml(str) {
+  if (str == null || typeof str !== "string") return "";
+  return str
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+/**
+ * Build HTML for a single daily reminder email listing all tasks due today for one user.
+ * @param {string} todayStr - Date string YYYY-MM-DD
+ * @param {{ title?: string, description?: string }[]} tasks - Tasks due today for this user
+ */
+function buildDailyReminderHtml(todayStr, tasks) {
+  const taskRows = tasks
+    .map((task) => {
+      const title = escapeHtml(task.title ?? "Untitled task");
+      const desc = task.description
+        ? `<p style="margin:0 0 8px;font-size:13px;line-height:1.5;color:#6b7280;">${escapeHtml(task.description)}</p>`
+        : "";
+      return `
+        <tr>
+          <td style="padding:12px 0;border-bottom:1px solid #1f2937;">
+            <p style="margin:0 0 4px;font-size:15px;font-weight:600;color:#e5e7eb;">${title}</p>
+            ${desc}
+          </td>
+        </tr>`;
+    })
+    .join("");
+
+  return `
+    <div style="background:#020617;padding:32px 0;font-family:system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;color:#e5e7eb;">
+      <table role="presentation" cellspacing="0" cellpadding="0" border="0" align="center" width="100%" style="max-width:520px;margin:0 auto;background:#020617;border-radius:18px;border:1px solid #1f2937;box-shadow:0 18px 45px rgba(15,23,42,0.9);">
+        <tr>
+          <td style="padding:24px 28px 20px;border-bottom:1px solid #111827;">
+            <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%">
+              <tr>
+                <td style="font-size:18px;font-weight:600;color:#e5e7eb;">QuickTasks</td>
+                <td align="right" style="font-size:12px;color:#6b7280;">Daily reminder</td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:24px 28px 16px;">
+            <h2 style="margin:0 0 8px;font-size:20px;line-height:1.3;color:#f9fafb;font-weight:600;">
+              Tasks due today (${escapeHtml(todayStr)})
+            </h2>
+            <p style="margin:0 0 18px;font-size:14px;line-height:1.6;color:#9ca3af;">
+              You have ${tasks.length} pending ${tasks.length === 1 ? "task" : "tasks"} due today. Here’s your list:
+            </p>
+            <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%">
+              ${taskRows}
+            </table>
+            <p style="margin:18px 0 0;font-size:13px;line-height:1.6;color:#6b7280;">
+              Open QuickTasks to update progress and plan your day.
+            </p>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:16px 28px 20px;border-top:1px solid #111827;font-size:11px;line-height:1.5;color:#4b5563;">
+            Sent by QuickTasks • Stay organized, one focused day at a time.
+          </td>
+        </tr>
+      </table>
+    </div>`;
+}
+
+/**
+ * Send one daily reminder email per user, each containing all their uncompleted tasks due today.
+ * Uses server local date for "today". Errors for one user are logged; others still receive emails.
+ * @returns {{ usersEmailed: number, usersSkipped: number, tasksTotal: number }}
+ */
 export async function sendDailyReminderEmails() {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
-
   const todayStr = today.toISOString().slice(0, 10);
+
+  let usersEmailed = 0;
+  let usersSkipped = 0;
+  let tasksTotal = 0;
 
   try {
     const snapshot = await adminDb
@@ -15,83 +93,60 @@ export async function sendDailyReminderEmails() {
       .get();
 
     if (snapshot.empty) {
-      return { sent: 0, skipped: 0 };
+      console.log("Daily reminders: no tasks due today.");
+      return { usersEmailed: 0, usersSkipped: 0, tasksTotal: 0 };
     }
 
-    let sent = 0;
-    let skipped = 0;
+    // Group tasks by user_email
+    /** @type {Map<string, { title?: string, description?: string }[]>} */
+    const byUser = new Map();
 
     for (const doc of snapshot.docs) {
-      const task = doc.data();
-
-      const email = task.user_email;
-      if (!email) {
-        skipped += 1;
-        continue;
+      const data = doc.data();
+      const email = (data.user_email || "").trim().toLowerCase();
+      if (!email || !email.includes("@")) continue;
+      if (!byUser.has(email)) {
+        byUser.set(email, []);
       }
+      byUser.get(email).push({
+        title: data.title,
+        description: data.description,
+      });
+      tasksTotal += 1;
+    }
 
-      const from =
-        process.env.MAIL_FROM ?? `QuickTasks <${process.env.EMAIL_USER}>`;
-      const title = task.title ?? "Task reminder";
+    const from =
+      process.env.MAIL_FROM ??
+      `QuickTasks <${process.env.MAIL_FROM_EMAIL || process.env.EMAIL_USER || "noreply@quicktasks.local"}>`;
 
-      const html = `
-        <div style="background:#020617;padding:32px 0;font-family:system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;color:#e5e7eb;">
-          <table role="presentation" cellspacing="0" cellpadding="0" border="0" align="center" width="100%" style="max-width:520px;margin:0 auto;background:#020617;border-radius:18px;border:1px solid #1f2937;box-shadow:0 18px 45px rgba(15,23,42,0.9);">
-            <tr>
-              <td style="padding:24px 28px 20px;border-bottom:1px solid #111827;">
-                <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%">
-                  <tr>
-                    <td style="font-size:18px;font-weight:600;color:#e5e7eb;">
-                      QuickTasks
-                    </td>
-                    <td align="right" style="font-size:12px;color:#6b7280;">
-                      Task reminder
-                    </td>
-                  </tr>
-                </table>
-              </td>
-            </tr>
-            <tr>
-              <td style="padding:24px 28px 16px;">
-                <h2 style="margin:0 0 8px;font-size:20px;line-height:1.3;color:#f9fafb;font-weight:600;">
-                  Reminder: ${title}
-                </h2>
-                <p style="margin:0 0 14px;font-size:14px;line-height:1.6;color:#9ca3af;">
-                  You have a task due today (${todayStr}). Checking it off keeps your momentum going.
-                </p>
-                <p style="margin:0 0 18px;font-size:13px;line-height:1.6;color:#6b7280;">
-                  Open QuickTasks to review this task and your other priorities for today.
-                </p>
-              </td>
-            </tr>
-            <tr>
-              <td style="padding:16px 28px 20px;border-top:1px solid #111827;font-size:11px;line-height:1.5;color:#4b5563;">
-                Sent by QuickTasks • Stay organized, one focused day at a time.
-              </td>
-            </tr>
-          </table>
-        </div>
-      `;
-
+    for (const [email, tasks] of byUser) {
+      if (!tasks.length) continue;
       try {
+        const html = buildDailyReminderHtml(todayStr, tasks);
+        const subject =
+          tasks.length === 1
+            ? `Reminder: ${tasks[0].title ?? "Task"} due today`
+            : `Reminder: ${tasks.length} tasks due today`;
+
         await mailTransport.sendMail({
           from,
           to: email,
-          subject: `Reminder: ${title}`,
+          subject,
           html,
         });
-        sent += 1;
+        usersEmailed += 1;
       } catch (e) {
-        console.error("Failed to send reminder email", e);
-        const errMsg = e instanceof Error ? e.message : String(e);
-        skipped += 1;
-        // Keep going but include error detail per task in logs
+        console.error(`Failed to send daily reminder to ${email}:`, e);
+        usersSkipped += 1;
       }
     }
 
-    return { sent, skipped };
+    console.log(
+      `Daily reminders: ${usersEmailed} users emailed, ${usersSkipped} skipped, ${tasksTotal} tasks total.`
+    );
+    return { usersEmailed, usersSkipped, tasksTotal };
   } catch (error) {
-    console.error("Failed to load tasks for reminders", error);
-    return { sent: 0, skipped: 0 };
+    console.error("Failed to load tasks for daily reminders", error);
+    return { usersEmailed: 0, usersSkipped: 0, tasksTotal: 0 };
   }
 }
