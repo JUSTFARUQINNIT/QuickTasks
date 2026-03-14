@@ -1,96 +1,110 @@
-import { useEffect, useState, type FormEvent } from 'react'
-import { collection, query, where, getDocs, addDoc, serverTimestamp } from 'firebase/firestore'
-import { auth, db } from '../lib/firebaseClient'
-import type { Task } from '../types/tasks'
+import { useEffect, useState, type FormEvent } from "react";
+import {
+  collection,
+  query,
+  where,
+  getDocs,
+  addDoc,
+  serverTimestamp,
+} from "firebase/firestore";
+import { auth, db } from "../lib/firebaseClient";
+import type { Task } from "../types/tasks";
 
 type InviteCollaboratorModalProps = {
-  task: Task
-  onClose: () => void
-}
+  task: Task;
+  onClose: () => void;
+};
 
-export function InviteCollaboratorModal({ task, onClose }: InviteCollaboratorModalProps) {
-  const [email, setEmail] = useState(task.assigned_email ?? '')
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const [success, setSuccess] = useState<string | null>(null)
+export function InviteCollaboratorModal({
+  task,
+  onClose,
+}: InviteCollaboratorModalProps) {
+  const [email, setEmail] = useState(task.assigned_email ?? "");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!error && !success) return
+    if (!error && !success) return;
     const timeoutId = window.setTimeout(() => {
-      setError(null)
-      setSuccess(null)
-    }, 4000)
+      setError(null);
+      setSuccess(null);
+    }, 4000);
     return () => {
-      window.clearTimeout(timeoutId)
-    }
-  }, [error, success])
+      window.clearTimeout(timeoutId);
+    };
+  }, [error, success]);
 
   async function handleSubmit(e: FormEvent) {
-    e.preventDefault()
-    setError(null)
-    setSuccess(null)
+    e.preventDefault();
+    setError(null);
+    setSuccess(null);
 
-    const trimmedEmail = email.trim().toLowerCase()
+    const trimmedEmail = email.trim().toLowerCase();
     if (!trimmedEmail) {
-      setError('Email is required.')
-      return
+      setError("Email is required.");
+      return;
     }
 
     try {
-      const currentUser = auth.currentUser
+      const currentUser = auth.currentUser;
       if (!currentUser || !currentUser.email) {
-        throw new Error('You must be signed in to send invitations.')
+        throw new Error("You must be signed in to send invitations.");
       }
 
-      setLoading(true)
+      setLoading(true);
 
-      const usersRef = collection(db, 'profiles')
-      const q = query(usersRef, where('email', '==', trimmedEmail))
-      const snap = await getDocs(q)
+      const usersRef = collection(db, "profiles");
+      const q = query(usersRef, where("email", "==", trimmedEmail));
+      const snap = await getDocs(q);
 
       if (snap.empty) {
-        setError('User not found')
-        return
+        setError("User not found");
+        return;
       }
 
-      const invitedUserDoc = snap.docs[0]
-      const invitedUserId = invitedUserDoc.id
+      const invitedUserDoc = snap.docs[0];
+      const invitedUserId = invitedUserDoc.id;
 
-      await addDoc(collection(db, 'taskInvites'), {
+      await addDoc(collection(db, "taskInvites"), {
         taskId: task.id,
         taskTitle: task.title,
         invitedEmail: trimmedEmail,
         invitedUserId,
         invitedBy: currentUser.uid,
         invitedByEmail: currentUser.email,
-        status: 'pending',
+        status: "pending",
         createdAt: serverTimestamp(),
-      })
+      });
 
-      const rawBase = (import.meta.env.VITE_API_URL as string | undefined) ?? ''
-      const apiBase = rawBase.replace(/\/$/, '')
+      const rawBase =
+        (import.meta.env.VITE_API_URL as string | undefined) ?? "";
+      const apiBase = rawBase.replace(/\/$/, "");
 
       const res = await fetch(`${apiBase}/send-task-invite-email`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           email: trimmedEmail,
           taskTitle: task.title,
           invitedBy: currentUser.email,
         }),
-      })
+      });
 
       if (!res.ok) {
-        const body = (await res.json().catch(() => null)) as { error?: string } | null
-        throw new Error(body?.error ?? 'Could not send invite email.')
+        const body = (await res.json().catch(() => null)) as {
+          error?: string;
+        } | null;
+        throw new Error(body?.error ?? "Could not send invite email.");
       }
 
-      setSuccess('Invitation sent.')
+      setSuccess("Invitation sent.");
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Could not send invitation.'
-      setError(message)
+      const message =
+        err instanceof Error ? err.message : "Could not send invitation.";
+      setError(message);
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
   }
 
@@ -98,7 +112,9 @@ export function InviteCollaboratorModal({ task, onClose }: InviteCollaboratorMod
     <div className="modal-overlay" role="dialog" aria-modal="true">
       <div className="modal-card">
         <h2 className="modal-title">Invite collaborator</h2>
-        <p className="modal-subtitle">Share this task with another QuickTasks user.</p>
+        <p className="modal-subtitle">
+          Share this task with another QuickTasks user.
+        </p>
 
         <form className="tasks-form" onSubmit={handleSubmit}>
           <label className="field">
@@ -114,7 +130,7 @@ export function InviteCollaboratorModal({ task, onClose }: InviteCollaboratorMod
 
           <div className="invitation-form-actions">
             <button type="submit" className="primary-btn" disabled={loading}>
-              {loading ? 'Sending…' : 'Send invite'}
+              {loading ? "Sending…" : "Send invite"}
             </button>
             <button
               type="button"
@@ -127,10 +143,17 @@ export function InviteCollaboratorModal({ task, onClose }: InviteCollaboratorMod
           </div>
         </form>
 
-        {error && <p className="banner banner-error" style={{ marginTop: 12 }}>{error}</p>}
-        {success && <p className="banner banner-success" style={{ marginTop: 12 }}>{success}</p>}
+        {error && (
+          <p className="banner banner-error" style={{ marginTop: 12 }}>
+            {error}
+          </p>
+        )}
+        {success && (
+          <p className="banner banner-success" style={{ marginTop: 12 }}>
+            {success}
+          </p>
+        )}
       </div>
     </div>
-  )
+  );
 }
-

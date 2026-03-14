@@ -1,148 +1,177 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from "react";
 import type { FormEvent } from "react";
-import { Link } from 'react-router-dom'
+import { Link } from "react-router-dom";
 import {
   GoogleAuthProvider,
   signInWithEmailAndPassword,
   signInWithPopup,
   createUserWithEmailAndPassword,
-} from 'firebase/auth'
-import { auth } from '../lib/firebaseClient'
+} from "firebase/auth";
+import { auth } from "../lib/firebaseClient";
 
-type AuthMode = 'signin' | 'signup'
+type AuthMode = "signin" | "signup";
 
 type Props = {
-  mode: AuthMode
-}
+  mode: AuthMode;
+};
 
 export function AuthView({ mode }: Props) {
-  const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
-  const [rememberMe, setRememberMe] = useState(true)
-  const [loading, setLoading] = useState(false)
-  const [loadingLabel, setLoadingLabel] = useState<string | null>(null)
-  const [message, setMessage] = useState<string | null>(null)
-  const [error, setError] = useState<string | null>(null)
-  const [showPassword, setShowPassword] = useState(false)
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [rememberMe, setRememberMe] = useState(true);
+  const [loading, setLoading] = useState(false);
+  const [loadingLabel, setLoadingLabel] = useState<string | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [showPassword, setShowPassword] = useState(false);
 
-  const title = useMemo(() => (mode === 'signin' ? 'Sign in' : 'Create your account'), [mode])
-  const subtitle = useMemo(
-    () => (mode === 'signin' ? 'Welcome back. Pick up where you left off.' : 'Start using QuickTasks in under a minute.'),
+  const title = useMemo(
+    () => (mode === "signin" ? "Sign in" : "Create your account"),
     [mode],
-  )
+  );
+  const subtitle = useMemo(
+    () =>
+      mode === "signin"
+        ? "Welcome back. Pick up where you left off."
+        : "Start using QuickTasks in under a minute.",
+    [mode],
+  );
 
   useEffect(() => {
-    if (!error) return
-    const id = window.setTimeout(() => setError(null), 5000)
-    return () => window.clearTimeout(id)
-  }, [error])
+    if (!error) return;
+    const id = window.setTimeout(() => setError(null), 5000);
+    return () => window.clearTimeout(id);
+  }, [error]);
 
   useEffect(() => {
-    if (!message) return
-    const id = window.setTimeout(() => setMessage(null), 5000)
-    return () => window.clearTimeout(id)
-  }, [message])
+    if (!message) return;
+    const id = window.setTimeout(() => setMessage(null), 5000);
+    return () => window.clearTimeout(id);
+  }, [message]);
 
   async function handleSubmit(e: FormEvent) {
-    e.preventDefault()
-    setLoading(true)
-    setLoadingLabel(mode === 'signin' ? 'Signing in…' : 'Creating account…')
-    setMessage(null)
-    setError(null)
+    e.preventDefault();
+    setLoading(true);
+    setLoadingLabel(mode === "signin" ? "Signing in…" : "Creating account…");
+    setMessage(null);
+    setError(null);
 
     try {
-      if (mode === 'signin') {
-        void rememberMe
-        await signInWithEmailAndPassword(auth, email, password)
+      if (mode === "signin") {
+        void rememberMe;
+        await signInWithEmailAndPassword(auth, email, password);
       } else {
-        await createUserWithEmailAndPassword(auth, email, password)
+        await createUserWithEmailAndPassword(auth, email, password);
 
         // Fire-and-forget welcome email via backend
         try {
-          const rawBase = (import.meta.env.VITE_API_URL as string | undefined) ?? ''
-          const apiBase = rawBase.replace(/\/$/, '')
+          const rawBase =
+            (import.meta.env.VITE_API_URL as string | undefined) ?? "";
+          const apiBase = rawBase.replace(/\/$/, "");
           void fetch(`${apiBase}/api/auth/welcome`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ email }),
           }).catch((err) => {
-            console.error('Welcome email error:', err)
-          })
+            console.error("Welcome email error:", err);
+          });
         } catch (err) {
-          console.error('Welcome email trigger error:', err)
+          console.error("Welcome email trigger error:", err);
         }
 
-        setMessage('Account created. Check your inbox to confirm your email before signing in.')
+        setMessage(
+          "Account created. Check your inbox to confirm your email before signing in.",
+        );
       }
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Something went wrong. Please try again.'
-      setError(message)
+      const message =
+        err instanceof Error
+          ? err.message
+          : "Something went wrong. Please try again.";
+      setError(message);
     } finally {
-      setLoading(false)
-      setLoadingLabel(null)
+      setLoading(false);
+      setLoadingLabel(null);
     }
   }
 
   async function handleGoogle() {
-    setLoading(true)
-    setLoadingLabel('Continuing with Google…')
-    setError(null)
-    setMessage(null)
+    setLoading(true);
+    setLoadingLabel("Continuing with Google…");
+    setError(null);
+    setMessage(null);
     try {
-      const provider = new GoogleAuthProvider()
-      await signInWithPopup(auth, provider)
+      const provider = new GoogleAuthProvider();
+      await signInWithPopup(auth, provider);
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Google sign-in failed. Please try again.'
-      setError(message)
+      const message =
+        err instanceof Error
+          ? err.message
+          : "Google sign-in failed. Please try again.";
+      setError(message);
     } finally {
-      setLoading(false)
-      setLoadingLabel(null)
+      setLoading(false);
+      setLoadingLabel(null);
     }
   }
 
   async function handleResetPassword() {
     if (!email) {
-      setError('Enter your email first to receive a reset link.')
-      return
+      setError("Enter your email first to receive a reset link.");
+      return;
     }
-    setLoading(true)
-    setLoadingLabel('Sending reset link…')
-    setError(null)
-    setMessage(null)
+    setLoading(true);
+    setLoadingLabel("Sending reset link…");
+    setError(null);
+    setMessage(null);
     try {
-      const rawBase = (import.meta.env.VITE_API_URL as string | undefined) ?? ''
-      const apiBase = rawBase.replace(/\/$/, '')
+      const rawBase =
+        (import.meta.env.VITE_API_URL as string | undefined) ?? "";
+      const apiBase = rawBase.replace(/\/$/, "");
       const res = await fetch(`${apiBase}/api/auth/request-password-reset`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email }),
-      })
+      });
       if (!res.ok) {
-        const body = (await res.json().catch(() => null)) as { error?: string } | null
-        throw new Error(body?.error ?? 'Could not send reset email. Please try again.')
+        const body = (await res.json().catch(() => null)) as {
+          error?: string;
+        } | null;
+        throw new Error(
+          body?.error ?? "Could not send reset email. Please try again.",
+        );
       }
-      setMessage('Password reset email sent. Check your inbox.')
+      setMessage("Password reset email sent. Check your inbox.");
     } catch (err) {
-      console.error('AuthView reset password error (backend):', err)
-      const message = err instanceof Error ? err.message : 'Could not send reset email. Please try again.'
-      setError(message)
+      console.error("AuthView reset password error (backend):", err);
+      const message =
+        err instanceof Error
+          ? err.message
+          : "Could not send reset email. Please try again.";
+      setError(message);
     } finally {
-      setLoading(false)
-      setLoadingLabel(null)
+      setLoading(false);
+      setLoadingLabel(null);
     }
   }
 
   return (
     <div className="auth-shell">
-      <div className={`auth-card ${mode === 'signin' ? 'auth-card--signin' : ''}`}>
-        {mode === 'signin' || mode === 'signup' ? (
+      <div
+        className={`auth-card ${mode === "signin" ? "auth-card--signin" : ""}`}
+      >
+        {mode === "signin" || mode === "signup" ? (
           <header className="auth-header auth-header--signin">
             <div className="auth-brand">
-              <img className="auth-brand-logo" src="/quicktasks-logo.svg" alt="QuickTasks logo" />
+              <img
+                className="auth-brand-logo"
+                src="/quicktasks-logo.svg"
+                alt="QuickTasks logo"
+              />
               <span className="auth-brand-name">QuickTasks</span>
             </div>
             <h1 className="auth-title">{title}</h1>
-            {mode === 'signup' && <p className="auth-subtitle">{subtitle}</p>}
+            {mode === "signup" && <p className="auth-subtitle">{subtitle}</p>}
           </header>
         ) : (
           <header className="auth-header">
@@ -172,17 +201,21 @@ export function AuthView({ mode }: Props) {
             <span>Password</span>
             <div className="password-input">
               <input
-                type={showPassword ? 'text' : 'password'}
+                type={showPassword ? "text" : "password"}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder={mode === 'signup' ? 'Create a strong password' : 'Enter your password'}
+                placeholder={
+                  mode === "signup"
+                    ? "Create a strong password"
+                    : "Enter your password"
+                }
                 required
               />
               <button
                 type="button"
                 className="password-toggle"
                 onClick={() => setShowPassword((prev) => !prev)}
-                aria-label={showPassword ? 'Hide password' : 'Show password'}
+                aria-label={showPassword ? "Hide password" : "Show password"}
               >
                 {showPassword ? (
                   <svg
@@ -244,7 +277,7 @@ export function AuthView({ mode }: Props) {
             </div>
           </label>
 
-          {mode === 'signin' && (
+          {mode === "signin" && (
             <label className="remember-row">
               <input
                 type="checkbox"
@@ -257,24 +290,37 @@ export function AuthView({ mode }: Props) {
 
           <button
             type="submit"
-            className={`primary-btn ${mode === 'signin' || mode === 'signup' ? 'primary-btn--light' : ''}`}
+            className={`primary-btn ${mode === "signin" || mode === "signup" ? "primary-btn--light" : ""}`}
             disabled={loading}
           >
-            {loading ? (loadingLabel ?? 'Working…') : mode === 'signin' ? 'Sign in' : 'Create account'}
+            {loading
+              ? (loadingLabel ?? "Working…")
+              : mode === "signin"
+                ? "Sign in"
+                : "Create account"}
           </button>
         </form>
 
-        {mode === 'signin' && (
-          <button type="button" className="link-btn link-btn--strong" onClick={handleResetPassword} disabled={loading}>
+        {mode === "signin" && (
+          <button
+            type="button"
+            className="link-btn link-btn--strong"
+            onClick={handleResetPassword}
+            disabled={loading}
+          >
             Forgot your password?
           </button>
         )}
 
-        {mode === 'signin' && <div className="auth-divider"><span>or</span></div>}
+        {mode === "signin" && (
+          <div className="auth-divider">
+            <span>or</span>
+          </div>
+        )}
 
         <button
           type="button"
-          className={`ghost-btn google-btn ${mode === 'signin' ? 'google-btn--signin' : ''}`}
+          className={`ghost-btn google-btn ${mode === "signin" ? "google-btn--signin" : ""}`}
           onClick={handleGoogle}
           disabled={loading}
         >
@@ -298,14 +344,14 @@ export function AuthView({ mode }: Props) {
               />
             </svg>
           </span>
-          {mode === 'signin' ? 'Sign in with Google' : 'Continue with Google'}
+          {mode === "signin" ? "Sign in with Google" : "Continue with Google"}
         </button>
 
         {message && <p className="banner banner-success">{message}</p>}
         {error && <p className="banner banner-error">{error}</p>}
 
         <p className="switch-auth">
-          {mode === 'signin' ? (
+          {mode === "signin" ? (
             <>
               New to QuickTasks? <Link to="/signup">Create an account</Link>
             </>
@@ -317,6 +363,5 @@ export function AuthView({ mode }: Props) {
         </p>
       </div>
     </div>
-  )
+  );
 }
-

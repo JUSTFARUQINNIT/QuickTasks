@@ -1,37 +1,38 @@
-import { adminDb } from "../utils/firebase.js"
-import { mailTransport } from "../utils/mailer.js"
+import { adminDb } from "../utils/firebase.js";
+import { mailTransport } from "../utils/mailer.js";
 
 export async function sendDailyReminderEmails() {
-  const today = new Date()
-  today.setHours(0, 0, 0, 0)
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
 
-  const todayStr = today.toISOString().slice(0, 10)
+  const todayStr = today.toISOString().slice(0, 10);
 
   try {
     const snapshot = await adminDb
       .collection("tasks")
       .where("completed", "==", false)
       .where("due_date", "==", todayStr)
-      .get()
+      .get();
 
     if (snapshot.empty) {
-      return { sent: 0, skipped: 0 }
+      return { sent: 0, skipped: 0 };
     }
 
-    let sent = 0
-    let skipped = 0
+    let sent = 0;
+    let skipped = 0;
 
     for (const doc of snapshot.docs) {
-      const task = doc.data()
+      const task = doc.data();
 
-      const email = task.user_email
+      const email = task.user_email;
       if (!email) {
-        skipped += 1
-        continue
+        skipped += 1;
+        continue;
       }
 
-      const from = process.env.MAIL_FROM ?? `QuickTasks <${process.env.EMAIL_USER}>`
-      const title = task.title ?? "Task reminder"
+      const from =
+        process.env.MAIL_FROM ?? `QuickTasks <${process.env.EMAIL_USER}>`;
+      const title = task.title ?? "Task reminder";
 
       const html = `
         <div style="background:#020617;padding:32px 0;font-family:system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;color:#e5e7eb;">
@@ -70,7 +71,7 @@ export async function sendDailyReminderEmails() {
             </tr>
           </table>
         </div>
-      `
+      `;
 
       try {
         await mailTransport.sendMail({
@@ -78,19 +79,19 @@ export async function sendDailyReminderEmails() {
           to: email,
           subject: `Reminder: ${title}`,
           html,
-        })
-        sent += 1
+        });
+        sent += 1;
       } catch (e) {
-        console.error("Failed to send reminder email", e)
-        const errMsg = e instanceof Error ? e.message : String(e)
-        skipped += 1
+        console.error("Failed to send reminder email", e);
+        const errMsg = e instanceof Error ? e.message : String(e);
+        skipped += 1;
         // Keep going but include error detail per task in logs
       }
     }
 
-    return { sent, skipped }
+    return { sent, skipped };
   } catch (error) {
-    console.error("Failed to load tasks for reminders", error)
-    return { sent: 0, skipped: 0 }
+    console.error("Failed to load tasks for reminders", error);
+    return { sent: 0, skipped: 0 };
   }
 }

@@ -9,7 +9,7 @@ if (API_KEY) {
 } else {
   // This will surface clearly in logs on environments where the key is missing
   console.error(
-    "BREVO_API_KEY is not set. Email sending will fail until this is configured."
+    "BREVO_API_KEY is not set. Email sending will fail until this is configured.",
   );
 }
 
@@ -44,7 +44,7 @@ function resolveSender(from) {
 
   if (!DEFAULT_SENDER_EMAIL) {
     console.error(
-      "No default sender email configured. Set MAIL_FROM_EMAIL or EMAIL_USER."
+      "No default sender email configured. Set MAIL_FROM_EMAIL or EMAIL_USER.",
     );
   }
 

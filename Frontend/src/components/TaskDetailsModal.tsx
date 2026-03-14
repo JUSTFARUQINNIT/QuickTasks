@@ -1,17 +1,17 @@
-import { useEffect, useState } from 'react'
-import type { Task } from '../types/tasks'
-import { collection, doc, getDoc } from 'firebase/firestore'
-import { auth, db } from '../lib/firebaseClient'
+import { useEffect, useState } from "react";
+import type { Task } from "../types/tasks";
+import { collection, doc, getDoc } from "firebase/firestore";
+import { auth, db } from "../lib/firebaseClient";
 
 type TaskDetailsModalProps = {
-  task: Task
-  isOwner: boolean
-  onClose: () => void
-  onEdit: (task: Task) => void
-  onToggleComplete: (task: Task) => void
-  onDelete: (task: Task) => void
-  onInviteCollaborator: () => void
-}
+  task: Task;
+  isOwner: boolean;
+  onClose: () => void;
+  onEdit: (task: Task) => void;
+  onToggleComplete: (task: Task) => void;
+  onDelete: (task: Task) => void;
+  onInviteCollaborator: () => void;
+};
 
 export function TaskDetailsModal({
   task,
@@ -22,91 +22,107 @@ export function TaskDetailsModal({
   onDelete,
   onInviteCollaborator,
 }: TaskDetailsModalProps) {
-  const [collaboratorLabels, setCollaboratorLabels] = useState<string[] | null>(null)
-  const [collaboratorsLoading, setCollaboratorsLoading] = useState(false)
-  const [ownerLabel, setOwnerLabel] = useState<string | null>(null)
+  const [collaboratorLabels, setCollaboratorLabels] = useState<string[] | null>(
+    null,
+  );
+  const [collaboratorsLoading, setCollaboratorsLoading] = useState(false);
+  const [ownerLabel, setOwnerLabel] = useState<string | null>(null);
 
-  const currentUserId = auth.currentUser?.uid ?? null
+  const currentUserId = auth.currentUser?.uid ?? null;
   const isSelfCollaborator =
-    !!currentUserId && Array.isArray(task.collaborators) && task.collaborators.includes(currentUserId)
+    !!currentUserId &&
+    Array.isArray(task.collaborators) &&
+    task.collaborators.includes(currentUserId);
 
-  const roleLabel = task.isInvited || isSelfCollaborator ? 'Collaborator' : isOwner ? 'Owner' : null
+  const roleLabel =
+    task.isInvited || isSelfCollaborator
+      ? "Collaborator"
+      : isOwner
+        ? "Owner"
+        : null;
 
   // Load collaborators (all users shared on this task)
   useEffect(() => {
-    let isMounted = true
+    let isMounted = true;
 
     async function loadCollaborators() {
       const ids = Array.from(new Set(task.collaborators ?? [])).filter(
-        (id) => typeof id === 'string' && id.length > 0
-      )
+        (id) => typeof id === "string" && id.length > 0,
+      );
       if (ids.length === 0) {
         if (isMounted) {
-          setCollaboratorLabels([])
-          setCollaboratorsLoading(false)
+          setCollaboratorLabels([]);
+          setCollaboratorsLoading(false);
         }
-        return
+        return;
       }
 
-      setCollaboratorsLoading(true)
+      setCollaboratorsLoading(true);
       try {
-        const labels: string[] = []
+        const labels: string[] = [];
         await Promise.all(
           ids.map(async (uid) => {
             try {
-              const ref = doc(collection(db, 'profiles'), uid)
-              const snap = await getDoc(ref)
+              const ref = doc(collection(db, "profiles"), uid);
+              const snap = await getDoc(ref);
               if (!snap.exists()) {
-                labels.push(uid)
-                return
+                labels.push(uid);
+                return;
               }
-              const data = snap.data() as { email?: string | null; username?: string | null }
-              labels.push(data.username ?? data.email ?? uid)
+              const data = snap.data() as {
+                email?: string | null;
+                username?: string | null;
+              };
+              labels.push(data.username ?? data.email ?? uid);
             } catch {
-              labels.push(uid)
+              labels.push(uid);
             }
-          })
-        )
-        if (!isMounted) return
-        setCollaboratorLabels(labels)
+          }),
+        );
+        if (!isMounted) return;
+        setCollaboratorLabels(labels);
       } finally {
-        if (isMounted) setCollaboratorsLoading(false)
+        if (isMounted) setCollaboratorsLoading(false);
       }
     }
 
-    void loadCollaborators()
+    void loadCollaborators();
 
     return () => {
-      isMounted = false
-    }
-  }, [])
+      isMounted = false;
+    };
+  }, []);
 
   // Load owner username/email
   useEffect(() => {
-    let isMounted = true
+    let isMounted = true;
 
     async function loadOwner() {
-      if (!task.ownerId) return
+      if (!task.ownerId) return;
       try {
-        const ref = doc(collection(db, 'profiles'), task.ownerId)
-        const snap = await getDoc(ref)
+        const ref = doc(collection(db, "profiles"), task.ownerId);
+        const snap = await getDoc(ref);
         if (!snap.exists()) {
-          if (isMounted) setOwnerLabel(task.ownerId)
-          return
+          if (isMounted) setOwnerLabel(task.ownerId);
+          return;
         }
-        const data = snap.data() as { email?: string | null; username?: string | null }
-        if (isMounted) setOwnerLabel(data.username ?? data.email ?? task.ownerId)
+        const data = snap.data() as {
+          email?: string | null;
+          username?: string | null;
+        };
+        if (isMounted)
+          setOwnerLabel(data.username ?? data.email ?? task.ownerId);
       } catch {
-        if (isMounted) setOwnerLabel(task.ownerId)
+        if (isMounted) setOwnerLabel(task.ownerId);
       }
     }
 
-    void loadOwner()
+    void loadOwner();
 
     return () => {
-      isMounted = false
-    }
-  }, [task.ownerId])
+      isMounted = false;
+    };
+  }, [task.ownerId]);
 
   return (
     <div className="modal-overlay" role="dialog" aria-modal="true">
@@ -120,9 +136,14 @@ export function TaskDetailsModal({
             <span className="task-card-label" />
             <span
               className="task-card-value task-card-value--multiline"
-              style={{ color: '#cf1818', textAlign: 'center', marginBottom: 12 }}
+              style={{
+                color: "#cf1818",
+                textAlign: "center",
+                marginBottom: 12,
+              }}
             >
-              You can mark this task as complete, but editing is restricted. Other collaborators are visible below.
+              You can mark this task as complete, but editing is restricted.
+              Other collaborators are visible below.
             </span>
           </div>
         )}
@@ -139,10 +160,12 @@ export function TaskDetailsModal({
               <span className="task-card-value">
                 <span
                   className={`task-pill ${
-                    roleLabel === 'Owner' ? 'task-pill--owner' : 'task-pill--collaborator'
+                    roleLabel === "Owner"
+                      ? "task-pill--owner"
+                      : "task-pill--collaborator"
                   }`}
                 >
-                  {roleLabel === 'Owner' ? '👑 Owner' : '🤝 Collaborator'}
+                  {roleLabel === "Owner" ? "👑 Owner" : "🤝 Collaborator"}
                 </span>
               </span>
             </div>
@@ -166,13 +189,15 @@ export function TaskDetailsModal({
 
           <div className="task-card-row">
             <span className="task-card-label">Category</span>
-            <span className="task-card-value">{task.category ?? '—'}</span>
+            <span className="task-card-value">{task.category ?? "—"}</span>
           </div>
 
           <div className="task-card-row">
             <span className="task-card-label">Priority</span>
             <span className="task-card-value">
-              <span className={`task-pill task-pill--${task.priority}`}>{task.priority}</span>
+              <span className={`task-pill task-pill--${task.priority}`}>
+                {task.priority}
+              </span>
             </span>
           </div>
 
@@ -180,15 +205,19 @@ export function TaskDetailsModal({
             <span className="task-card-label">Due date</span>
             <span className="task-card-value">
               {task.due_date
-                ? new Date(task.due_date).toLocaleDateString(undefined, { dateStyle: 'medium' })
-                : '—'}
+                ? new Date(task.due_date).toLocaleDateString(undefined, {
+                    dateStyle: "medium",
+                  })
+                : "—"}
             </span>
           </div>
 
           <div className="task-card-row">
             <span className="task-card-label">Created</span>
             <span className="task-card-value">
-              {new Date(task.created_at).toLocaleDateString(undefined, { dateStyle: 'medium' })}
+              {new Date(task.created_at).toLocaleDateString(undefined, {
+                dateStyle: "medium",
+              })}
             </span>
           </div>
 
@@ -197,10 +226,10 @@ export function TaskDetailsModal({
             <span className="task-card-value">
               <span
                 className={`task-status task-status--${
-                  task.completed ? 'completed' : 'pending'
+                  task.completed ? "completed" : "pending"
                 } task-status--pill`}
               >
-                {task.completed ? 'Completed' : 'Pending'}
+                {task.completed ? "Completed" : "Pending"}
               </span>
             </span>
           </div>
@@ -216,70 +245,82 @@ export function TaskDetailsModal({
             <span className="task-card-label">Collaborators</span>
             <span className="task-card-value task-card-value--multiline">
               {collaboratorsLoading
-                ? 'Loading team...'
+                ? "Loading team..."
                 : collaboratorLabels && collaboratorLabels.length > 0
-                  ? collaboratorLabels.join(', ')
-                  : 'No collaborators yet'}
+                  ? collaboratorLabels.join(", ")
+                  : "No collaborators yet"}
             </span>
           </div>
         </div>
 
-        <div className="collaborators-form-actions" style={{ marginTop: 24, justifyContent: 'space-between' }}>
-            {isOwner ? (
-              <>
-                <button type="button" className="primary-btn" onClick={() => onEdit(task)}>
-                  Edit task
-                </button>
-                <div
-                  style={{
-                    marginTop: 18,
-                    marginBottom: 10,
-                    display: 'flex',
-                    gap: 8,
-                    flexWrap: 'wrap',
-                    width: '100%',
-                    justifyContent: 'space-between',
-                  }}
-                >
-                  <button
-                    type="button"
-                    className="secondary-btn task-action-btn"
-                    onClick={onInviteCollaborator}
-                  >
-                    Invite collaborator
-                  </button>
-                  <button
-                    type="button"
-                    className="secondary-btn task-action-btn"
-                    onClick={() => onToggleComplete(task)}
-                  >
-                    {task.completed ? 'Undo complete' : 'Mark complete'}
-                  </button>
-                  <button
-                    type="button"
-                    className="task-action-btn task-action-btn--danger"
-                    onClick={() => onDelete(task)}
-                  >
-                    Delete task
-                  </button>
-                </div>
-              </>
-            ) : task.isInvited ? (
+        <div
+          className="collaborators-form-actions"
+          style={{ marginTop: 24, justifyContent: "space-between" }}
+        >
+          {isOwner ? (
+            <>
               <button
                 type="button"
-                className="primary-btn collaborator"
-                onClick={() => onToggleComplete(task)}
+                className="primary-btn"
+                onClick={() => onEdit(task)}
               >
-                {task.completed ? 'Mark as not done' : 'Mark as done'}
+                Edit task
               </button>
-            ) : null}
+              <div
+                style={{
+                  marginTop: 18,
+                  marginBottom: 10,
+                  display: "flex",
+                  gap: 8,
+                  flexWrap: "wrap",
+                  width: "100%",
+                  justifyContent: "space-between",
+                }}
+              >
+                <button
+                  type="button"
+                  className="secondary-btn task-action-btn"
+                  onClick={onInviteCollaborator}
+                >
+                  Invite collaborator
+                </button>
+                <button
+                  type="button"
+                  className="secondary-btn task-action-btn"
+                  onClick={() => onToggleComplete(task)}
+                >
+                  {task.completed ? "Undo complete" : "Mark complete"}
+                </button>
+                <button
+                  type="button"
+                  className="task-action-btn task-action-btn--danger"
+                  onClick={() => onDelete(task)}
+                >
+                  Delete task
+                </button>
+              </div>
+            </>
+          ) : task.isInvited ? (
+            <button
+              type="button"
+              className="primary-btn collaborator"
+              onClick={() => onToggleComplete(task)}
+            >
+              {task.completed ? "Mark as not done" : "Mark as done"}
+            </button>
+          ) : null}
           {/* </div> */}
 
-          <button type="button" className="ghost-btn tasks-cancel-btn" onClick={onClose}>
+          <button
+            type="button"
+            className="ghost-btn tasks-cancel-btn"
+            onClick={onClose}
+          >
             Close
           </button>
         </div>
       </div>
-    // </div>
-  )
+      //{" "}
+    </div>
+  );
 }

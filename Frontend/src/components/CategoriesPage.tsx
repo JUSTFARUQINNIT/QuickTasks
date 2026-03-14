@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from "react";
 import type { FormEvent } from "react";
-import { auth, db } from '../lib/firebaseClient'
+import { auth, db } from "../lib/firebaseClient";
 import {
   addDoc,
   collection,
@@ -12,235 +12,259 @@ import {
   updateDoc,
   where,
   writeBatch,
-} from 'firebase/firestore'
+} from "firebase/firestore";
 
 type Category = {
-  id: string
-  name: string
-  created_at: string
-}
+  id: string;
+  name: string;
+  created_at: string;
+};
 
-type CategoryEditingState = Category | null
+type CategoryEditingState = Category | null;
 
 export function CategoriesPage() {
-  const [categories, setCategories] = useState<Category[]>([])
-  const [tasks, setTasks] = useState<{ id: string; category: string | null }[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-  const [saving, setSaving] = useState(false)
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [tasks, setTasks] = useState<{ id: string; category: string | null }[]>(
+    [],
+  );
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
 
-  const [name, setName] = useState('')
-  const [editing, setEditing] = useState<CategoryEditingState>(null)
+  const [name, setName] = useState("");
+  const [editing, setEditing] = useState<CategoryEditingState>(null);
 
   useEffect(() => {
-    let isMounted = true
+    let isMounted = true;
 
     async function load() {
-      setLoading(true)
-      setError(null)
+      setLoading(true);
+      setError(null);
 
       try {
         try {
-          const cached = localStorage.getItem('qt:categories')
+          const cached = localStorage.getItem("qt:categories");
           if (cached) {
-            const parsed = JSON.parse(cached) as Category[]
+            const parsed = JSON.parse(cached) as Category[];
             if (Array.isArray(parsed)) {
-              setCategories(parsed)
-              setLoading(false)
+              setCategories(parsed);
+              setLoading(false);
             }
           }
         } catch {
           // ignore cache errors
         }
 
-        const user = auth.currentUser
+        const user = auth.currentUser;
         if (!user) {
-          if (!isMounted) return
-          setCategories([])
-          setTasks([])
-          setLoading(false)
-          return
+          if (!isMounted) return;
+          setCategories([]);
+          setTasks([]);
+          setLoading(false);
+          return;
         }
 
         const categoriesQuery = query(
-          collection(db, 'categories'),
-          where('user_id', '==', user.uid),
-          orderBy('created_at', 'asc'),
-        )
+          collection(db, "categories"),
+          where("user_id", "==", user.uid),
+          orderBy("created_at", "asc"),
+        );
         const tasksQuery = query(
-          collection(db, 'tasks'),
-          where('user_id', '==', user.uid),
-        )
+          collection(db, "tasks"),
+          where("user_id", "==", user.uid),
+        );
 
         const [categoriesSnapshot, tasksSnapshot] = await Promise.all([
           getDocs(categoriesQuery),
           getDocs(tasksQuery),
-        ])
+        ]);
 
-        if (!isMounted) return
+        if (!isMounted) return;
 
         const categoryData = categoriesSnapshot.docs.map((d) => ({
           id: d.id,
-          ...(d.data() as Omit<Category, 'id'>),
-        }))
+          ...(d.data() as Omit<Category, "id">),
+        }));
         const taskData = tasksSnapshot.docs.map((d) => ({
           id: d.id,
           category: (d.data() as { category?: string | null }).category ?? null,
-        }))
+        }));
 
-        setCategories(categoryData as Category[])
-        setTasks(taskData)
+        setCategories(categoryData as Category[]);
+        setTasks(taskData);
       } catch (err) {
-        const message = err instanceof Error ? err.message : 'Could not load categories.'
-        if (!isMounted) return
-        setError(message)
+        const message =
+          err instanceof Error ? err.message : "Could not load categories.";
+        if (!isMounted) return;
+        setError(message);
       } finally {
-        if (isMounted) setLoading(false)
+        if (isMounted) setLoading(false);
       }
     }
 
-    void load()
+    void load();
 
     return () => {
-      isMounted = false
-    }
-  }, [])
+      isMounted = false;
+    };
+  }, []);
 
   useEffect(() => {
     try {
-      localStorage.setItem('qt:categories', JSON.stringify(categories))
+      localStorage.setItem("qt:categories", JSON.stringify(categories));
     } catch {
       // ignore write errors
     }
-  }, [categories])
+  }, [categories]);
 
   const countsByCategory = useMemo(() => {
-    const counts = new Map<string, number>()
+    const counts = new Map<string, number>();
     tasks.forEach((task) => {
-      const key = (task.category ?? '').trim()
-      if (!key) return
-      counts.set(key, (counts.get(key) ?? 0) + 1)
-    })
-    return counts
-  }, [tasks])
+      const key = (task.category ?? "").trim();
+      if (!key) return;
+      counts.set(key, (counts.get(key) ?? 0) + 1);
+    });
+    return counts;
+  }, [tasks]);
 
   async function handleSubmit(e: FormEvent) {
-    e.preventDefault()
-    if (!name.trim()) return
+    e.preventDefault();
+    if (!name.trim()) return;
 
-    setSaving(true)
-    setError(null)
+    setSaving(true);
+    setError(null);
 
     try {
-      const trimmedName = name.trim()
+      const trimmedName = name.trim();
 
       const duplicateExists = categories.some(
-        (c) => c.name.trim().toLowerCase() === trimmedName.toLowerCase() && (!editing || c.id !== editing.id),
-      )
+        (c) =>
+          c.name.trim().toLowerCase() === trimmedName.toLowerCase() &&
+          (!editing || c.id !== editing.id),
+      );
 
       if (duplicateExists) {
-        setError('A category with this name already exists.')
-        return
+        setError("A category with this name already exists.");
+        return;
       }
 
-      const user = auth.currentUser
-      if (!user) throw new Error('You must be signed in to manage categories.')
+      const user = auth.currentUser;
+      if (!user) throw new Error("You must be signed in to manage categories.");
 
       if (editing) {
-        const categoryRef = doc(db, 'categories', editing.id)
-        await updateDoc(categoryRef, { name: trimmedName })
+        const categoryRef = doc(db, "categories", editing.id);
+        await updateDoc(categoryRef, { name: trimmedName });
 
         const tasksQuery = query(
-          collection(db, 'tasks'),
-          where('user_id', '==', user.uid),
-          where('category', '==', editing.name),
-        )
-        const tasksSnapshot = await getDocs(tasksQuery)
-        const batch = writeBatch(db)
+          collection(db, "tasks"),
+          where("user_id", "==", user.uid),
+          where("category", "==", editing.name),
+        );
+        const tasksSnapshot = await getDocs(tasksQuery);
+        const batch = writeBatch(db);
         tasksSnapshot.forEach((taskDoc) => {
-          batch.update(taskDoc.ref, { category: trimmedName })
-        })
-        await batch.commit()
+          batch.update(taskDoc.ref, { category: trimmedName });
+        });
+        await batch.commit();
 
-        setCategories((prev) => prev.map((c) => (c.id === editing.id ? { ...c, name: trimmedName } : c)))
+        setCategories((prev) =>
+          prev.map((c) =>
+            c.id === editing.id ? { ...c, name: trimmedName } : c,
+          ),
+        );
         setTasks((prev) =>
-          prev.map((t) => (t.category === editing.name ? { ...t, category: trimmedName } : t)),
-        )
+          prev.map((t) =>
+            t.category === editing.name ? { ...t, category: trimmedName } : t,
+          ),
+        );
       } else {
-        const nowIso = new Date().toISOString()
-        const newRef = await addDoc(collection(db, 'categories'), {
+        const nowIso = new Date().toISOString();
+        const newRef = await addDoc(collection(db, "categories"), {
           user_id: user.uid,
           name: trimmedName,
           created_at: nowIso,
-        })
+        });
 
-        setCategories((prev) => [...prev, { id: newRef.id, name: trimmedName, created_at: nowIso }])
+        setCategories((prev) => [
+          ...prev,
+          { id: newRef.id, name: trimmedName, created_at: nowIso },
+        ]);
       }
 
-      setName('')
-      setEditing(null)
+      setName("");
+      setEditing(null);
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Could not save category.'
-      setError(message)
+      const message =
+        err instanceof Error ? err.message : "Could not save category.";
+      setError(message);
     } finally {
-      setSaving(false)
+      setSaving(false);
     }
   }
 
   function startEdit(category: Category) {
-    setEditing(category)
-    setName(category.name)
+    setEditing(category);
+    setName(category.name);
   }
 
   async function handleDelete(category: Category) {
-    if (!window.confirm(`Delete category "${category.name}"? Tasks will keep their data but lose this category.`)) {
-      return
+    if (
+      !window.confirm(
+        `Delete category "${category.name}"? Tasks will keep their data but lose this category.`,
+      )
+    ) {
+      return;
     }
 
-    setSaving(true)
-    setError(null)
+    setSaving(true);
+    setError(null);
 
     try {
-      const user = auth.currentUser
-      if (!user) throw new Error('You must be signed in to manage categories.')
+      const user = auth.currentUser;
+      if (!user) throw new Error("You must be signed in to manage categories.");
 
-      const categoryRef = doc(db, 'categories', category.id)
+      const categoryRef = doc(db, "categories", category.id);
       const tasksQuery = query(
-        collection(db, 'tasks'),
-        where('user_id', '==', user.uid),
-        where('category', '==', category.name),
-      )
-      const tasksSnapshot = await getDocs(tasksQuery)
-      const batch = writeBatch(db)
-      batch.delete(categoryRef)
+        collection(db, "tasks"),
+        where("user_id", "==", user.uid),
+        where("category", "==", category.name),
+      );
+      const tasksSnapshot = await getDocs(tasksQuery);
+      const batch = writeBatch(db);
+      batch.delete(categoryRef);
       tasksSnapshot.forEach((taskDoc) => {
-        batch.update(taskDoc.ref, { category: null })
-      })
-      await batch.commit()
+        batch.update(taskDoc.ref, { category: null });
+      });
+      await batch.commit();
 
-      setCategories((prev) => prev.filter((c) => c.id !== category.id))
+      setCategories((prev) => prev.filter((c) => c.id !== category.id));
       setTasks((prev) =>
-        prev.map((t) => (t.category === category.name ? { ...t, category: null } : t)),
-      )
+        prev.map((t) =>
+          t.category === category.name ? { ...t, category: null } : t,
+        ),
+      );
 
       if (editing?.id === category.id) {
-        setEditing(null)
-        setName('')
+        setEditing(null);
+        setName("");
       }
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Could not delete category.'
-      setError(message)
+      const message =
+        err instanceof Error ? err.message : "Could not delete category.";
+      setError(message);
     } finally {
-      setSaving(false)
+      setSaving(false);
     }
   }
 
-  const hasCategories = categories.length > 0
+  const hasCategories = categories.length > 0;
 
   return (
     <div className="tasks-shell">
       <section className="tasks-panel tasks-form-panel">
-        <h2 className="tasks-heading">{editing ? 'Edit category' : 'Add category'}</h2>
+        <h2 className="tasks-heading">
+          {editing ? "Edit category" : "Add category"}
+        </h2>
         <p className="tasks-subtitle">
           Use categories to group tasks by project, theme, or area of focus.
         </p>
@@ -259,15 +283,21 @@ export function CategoriesPage() {
 
           <div className="categories-form-actions">
             <button type="submit" className="primary-btn" disabled={saving}>
-              {saving ? (editing ? 'Saving…' : 'Adding…') : editing ? 'Save category' : 'Add category'}
+              {saving
+                ? editing
+                  ? "Saving…"
+                  : "Adding…"
+                : editing
+                  ? "Save category"
+                  : "Add category"}
             </button>
             {editing && (
               <button
                 type="button"
                 className="ghost-btn tasks-cancel-btn"
                 onClick={() => {
-                  setEditing(null)
-                  setName('')
+                  setEditing(null);
+                  setName("");
                 }}
                 disabled={saving}
               >
@@ -280,7 +310,10 @@ export function CategoriesPage() {
         {error && <p className="banner banner-error">{error}</p>}
       </section>
 
-      <section className="tasks-panel tasks-list-panel" style={{ marginTop: '10px' }}>
+      <section
+        className="tasks-panel tasks-list-panel"
+        style={{ marginTop: "10px" }}
+      >
         <h2 className="tasks-heading">Categories</h2>
         {loading ? (
           <div className="tasks-empty">
@@ -288,7 +321,9 @@ export function CategoriesPage() {
           </div>
         ) : !hasCategories ? (
           <div className="tasks-empty">
-            <p>No categories yet. Add your first one to start organising tasks.</p>
+            <p>
+              No categories yet. Add your first one to start organising tasks.
+            </p>
           </div>
         ) : (
           <div className="tasks-table-wrapper">
@@ -329,6 +364,5 @@ export function CategoriesPage() {
         )}
       </section>
     </div>
-  )
+  );
 }
-

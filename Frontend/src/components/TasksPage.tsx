@@ -1,9 +1,9 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
-import type { CSSProperties, FormEvent, ReactNode } from 'react'
-import { auth, db } from '../lib/firebaseClient'
-import type { Priority, Task } from '../types/tasks'
-import { TaskDetailsModal } from './TaskDetailsModal'
-import { InviteCollaboratorModal } from './InviteCollaboratorModal'
+import { useEffect, useMemo, useRef, useState } from "react";
+import type { CSSProperties, FormEvent, ReactNode } from "react";
+import { auth, db } from "../lib/firebaseClient";
+import type { Priority, Task } from "../types/tasks";
+import { TaskDetailsModal } from "./TaskDetailsModal";
+import { InviteCollaboratorModal } from "./InviteCollaboratorModal";
 import {
   DndContext,
   PointerSensor,
@@ -11,9 +11,14 @@ import {
   useSensor,
   useSensors,
   type DragEndEvent,
-} from '@dnd-kit/core'
-import { SortableContext, arrayMove, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable'
-import { CSS } from '@dnd-kit/utilities'
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  arrayMove,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import {
   addDoc,
   collection,
@@ -27,102 +32,132 @@ import {
   updateDoc,
   where,
   writeBatch,
-} from 'firebase/firestore'
-import { enqueueOfflineAction, readCachedTasks, readOfflineQueue, writeCachedTasks, writeOfflineQueue } from '../lib/offlineTasks'
+} from "firebase/firestore";
+import {
+  enqueueOfflineAction,
+  readCachedTasks,
+  readOfflineQueue,
+  writeCachedTasks,
+  writeOfflineQueue,
+} from "../lib/offlineTasks";
 
 type EditingState = {
-  id: string
-  title: string
-  description: string
-  due_date: string
-  priority: Priority
-  category: string
-} | null
+  id: string;
+  title: string;
+  description: string;
+  due_date: string;
+  priority: Priority;
+  category: string;
+} | null;
 
-type TasksPageMode = 'add' | 'all' | 'both'
+type TasksPageMode = "add" | "all" | "both";
 
 type TasksPageProps = {
-  mode?: TasksPageMode
-}
+  mode?: TasksPageMode;
+};
 
-export function TasksPage({ mode = 'both' }: TasksPageProps) {
-  const [tasks, setTasks] = useState<Task[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-  const [isOffline, setIsOffline] = useState(() => (typeof navigator !== 'undefined' ? !navigator.onLine : false))
-  const [isSyncing, setIsSyncing] = useState(false)
-  const syncInFlight = useRef(false)
+export function TasksPage({ mode = "both" }: TasksPageProps) {
+  const [tasks, setTasks] = useState<Task[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [isOffline, setIsOffline] = useState(() =>
+    typeof navigator !== "undefined" ? !navigator.onLine : false,
+  );
+  const [isSyncing, setIsSyncing] = useState(false);
+  const syncInFlight = useRef(false);
 
-  async function fetchTasksForCurrentUser(): Promise<Array<{ id: string; data: Record<string, unknown> }>> {
-    const user = auth.currentUser
-    if (!user) return []
+  async function fetchTasksForCurrentUser(): Promise<
+    Array<{ id: string; data: Record<string, unknown> }>
+  > {
+    const user = auth.currentUser;
+    if (!user) return [];
 
-    const tasksRef = collection(db, 'tasks')
+    const tasksRef = collection(db, "tasks");
 
     // Owner tasks: (user_id == auth.uid)
     // We don't apply orderBy here to avoid requiring a composite index;
     // tasks are sorted by `order` on the client side after merging.
-    const ownerQuery = query(tasksRef, where('user_id', '==', user.uid))
+    const ownerQuery = query(tasksRef, where("user_id", "==", user.uid));
 
     // Collaborator tasks (legacy shared model): (collaborators array contains auth.uid)
     // Prefer ordered query, but this often needs a composite index; fall back to a temporary query without orderBy.
     const collaboratorQueryOrdered = query(
       tasksRef,
-      where('collaborators', 'array-contains', user.uid),
-      orderBy('order', 'asc'),
-    )
-    const collaboratorQueryTempNoOrderBy = query(tasksRef, where('collaborators', 'array-contains', user.uid))
+      where("collaborators", "array-contains", user.uid),
+      orderBy("order", "asc"),
+    );
+    const collaboratorQueryTempNoOrderBy = query(
+      tasksRef,
+      where("collaborators", "array-contains", user.uid),
+    );
 
     // Invited tasks (projection model): stored under userTasks/{userId}/tasks/{taskId}
-    const invitedTasksQuery = collection(db, 'userTasks', user.uid, 'tasks')
+    const invitedTasksQuery = collection(db, "userTasks", user.uid, "tasks");
 
     const [ownerSnap, invitedSnap] = await Promise.all([
       getDocs(ownerQuery),
       getDocs(invitedTasksQuery),
-    ])
+    ]);
 
-    let collaboratorDocs: Array<{ id: string; data: () => Record<string, unknown> }> = []
+    let collaboratorDocs: Array<{
+      id: string;
+      data: () => Record<string, unknown>;
+    }> = [];
     try {
-      const collaboratorSnapOrdered = await getDocs(collaboratorQueryOrdered)
-      collaboratorDocs = collaboratorSnapOrdered.docs as Array<{ id: string; data: () => Record<string, unknown> }>
+      const collaboratorSnapOrdered = await getDocs(collaboratorQueryOrdered);
+      collaboratorDocs = collaboratorSnapOrdered.docs as Array<{
+        id: string;
+        data: () => Record<string, unknown>;
+      }>;
     } catch (err) {
-      const code = (err as { code?: unknown } | null)?.code
-      if (code === 'permission-denied') {
+      const code = (err as { code?: unknown } | null)?.code;
+      if (code === "permission-denied") {
         console.error(
           // '[TasksPage] Collaborator query denied by Firestore rules. This usually means your published rules are not applied to the project your app is using, or the tasks are not actually storing collaborator UIDs in `collaborators`.',
           err,
-        )
+        );
         // Don’t fail the entire page; continue without collaborator tasks.
-        collaboratorDocs = []
+        collaboratorDocs = [];
       } else {
         console.warn(
           // '[TasksPage] Collaborator ordered query failed (likely missing composite index). Falling back to temporary query without orderBy.',
           err,
-        )
-        const collaboratorSnapTemp = await getDocs(collaboratorQueryTempNoOrderBy)
-        collaboratorDocs = collaboratorSnapTemp.docs as Array<{ id: string; data: () => Record<string, unknown> }>
+        );
+        const collaboratorSnapTemp = await getDocs(
+          collaboratorQueryTempNoOrderBy,
+        );
+        collaboratorDocs = collaboratorSnapTemp.docs as Array<{
+          id: string;
+          data: () => Record<string, unknown>;
+        }>;
       }
     }
 
-    const merged = new Map<string, { id: string; data: Record<string, unknown> }>()
+    const merged = new Map<
+      string,
+      { id: string; data: Record<string, unknown> }
+    >();
 
     // Master tasks owned by the current user.
     for (const d of ownerSnap.docs) {
-      merged.set(d.id, { id: d.id, data: d.data() as Record<string, unknown> })
+      merged.set(d.id, { id: d.id, data: d.data() as Record<string, unknown> });
     }
 
     // Legacy collaborator tasks.
     for (const d of collaboratorDocs) {
       if (!merged.has(d.id)) {
-        merged.set(d.id, { id: d.id, data: d.data() as Record<string, unknown> })
+        merged.set(d.id, {
+          id: d.id,
+          data: d.data() as Record<string, unknown>,
+        });
       }
     }
 
     // Invited task projections (userTasks/{userId}/tasks/...).
     for (const d of invitedSnap.docs) {
-      const data = d.data() as Record<string, unknown>
-      const refId = (data.ref as string | undefined) ?? d.id
-      if (merged.has(refId)) continue
+      const data = d.data() as Record<string, unknown>;
+      const refId = (data.ref as string | undefined) ?? d.id;
+      if (merged.has(refId)) continue;
       merged.set(refId, {
         id: refId,
         data: {
@@ -131,135 +166,148 @@ export function TasksPage({ mode = 'both' }: TasksPageProps) {
           isInvited: true,
           ref: refId,
         },
-      })
+      });
     }
 
     const combined = Array.from(merged.values()).sort((a, b) => {
-      const ao = typeof a.data.order === 'number' ? (a.data.order as number) : 0
-      const bo = typeof b.data.order === 'number' ? (b.data.order as number) : 0
-      return ao - bo
-    })
+      const ao =
+        typeof a.data.order === "number" ? (a.data.order as number) : 0;
+      const bo =
+        typeof b.data.order === "number" ? (b.data.order as number) : 0;
+      return ao - bo;
+    });
 
     // console.log('[TasksPage] fetched tasks for', user.uid, combined)
-    return combined
+    return combined;
   }
 
-  const [title, setTitle] = useState('')
-  const [description, setDescription] = useState('')
-  const [dueDate, setDueDate] = useState('')
-  const [priority, setPriority] = useState<Priority>('medium')
-  const [saving, setSaving] = useState(false)
-  const [editing, setEditing] = useState<EditingState>(null)
+  const [title, setTitle] = useState("");
+  const [description, setDescription] = useState("");
+  const [dueDate, setDueDate] = useState("");
+  const [priority, setPriority] = useState<Priority>("medium");
+  const [saving, setSaving] = useState(false);
+  const [editing, setEditing] = useState<EditingState>(null);
 
-  const [category, setCategory] = useState('')
-  const [search, setSearch] = useState('')
-  const [statusFilter, setStatusFilter] = useState<'all' | 'completed' | 'pending' | 'overdue'>('all')
-  const [categoryFilter, setCategoryFilter] = useState<'all' | string>('all')
+  const [category, setCategory] = useState("");
+  const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState<
+    "all" | "completed" | "pending" | "overdue"
+  >("all");
+  const [categoryFilter, setCategoryFilter] = useState<"all" | string>("all");
 
-  const [availableCategories, setAvailableCategories] = useState<string[]>([])
-  const [selectedTask, setSelectedTask] = useState<Task | null>(null)
-  const [showInviteModal, setShowInviteModal] = useState(false)
-  const invitedTaskUnsubscribeRef = useRef<null | (() => void)>(null)
+  const [availableCategories, setAvailableCategories] = useState<string[]>([]);
+  const [selectedTask, setSelectedTask] = useState<Task | null>(null);
+  const [showInviteModal, setShowInviteModal] = useState(false);
+  const invitedTaskUnsubscribeRef = useRef<null | (() => void)>(null);
 
-  const hasTasks = tasks.length > 0
+  const hasTasks = tasks.length > 0;
 
   const sortedTasks = useMemo(
     () =>
       [...tasks].sort((a, b) => {
         if (a.completed !== b.completed) {
-          return a.completed ? 1 : -1
+          return a.completed ? 1 : -1;
         }
         // Primary ordering is user-controlled drag-and-drop order.
-        const orderDiff = (a.order ?? 0) - (b.order ?? 0)
-        if (orderDiff !== 0) return orderDiff
-        return a.created_at.localeCompare(b.created_at)
+        const orderDiff = (a.order ?? 0) - (b.order ?? 0);
+        if (orderDiff !== 0) return orderDiff;
+        return a.created_at.localeCompare(b.created_at);
       }),
     [tasks],
-  )
+  );
 
   const canReorder = useMemo(() => {
-    return search.trim().length === 0 && statusFilter === 'all' && categoryFilter === 'all'
-  }, [search, statusFilter, categoryFilter])
+    return (
+      search.trim().length === 0 &&
+      statusFilter === "all" &&
+      categoryFilter === "all"
+    );
+  }, [search, statusFilter, categoryFilter]);
 
   useEffect(() => {
-    let isMounted = true
+    let isMounted = true;
 
     try {
-      const cached = readCachedTasks<Task>()
+      const cached = readCachedTasks<Task>();
       if (cached.length > 0 && isMounted) {
-        setTasks(cached)
-        setLoading(false)
+        setTasks(cached);
+        setLoading(false);
       }
     } catch {
       // ignore cache errors
     }
 
     async function load() {
-      setLoading(true)
-      setError(null)
+      setLoading(true);
+      setError(null);
       try {
-        const user = auth.currentUser
+        const user = auth.currentUser;
         if (!user) {
-          if (!isMounted) return
-          setTasks([])
-          setAvailableCategories([])
-          setLoading(false)
-          return
+          if (!isMounted) return;
+          setTasks([]);
+          setAvailableCategories([]);
+          setLoading(false);
+          return;
         }
 
         if (!navigator.onLine) {
           // Offline: rely on cached_tasks (set above). Keep UX responsive.
-          if (!isMounted) return
-          setLoading(false)
-          return
+          if (!isMounted) return;
+          setLoading(false);
+          return;
         }
-        
 
         const categoriesQuery = query(
-          collection(db, 'categories'),
-          where('user_id', '==', user.uid),
-          orderBy('created_at', 'asc'),
-        )
+          collection(db, "categories"),
+          where("user_id", "==", user.uid),
+          orderBy("created_at", "asc"),
+        );
 
         // Fetch tasks for the signed-in user (owner + collaborator).
         // This merges both result sets and sorts by `order` ascending.
-        const [fetchedTasks, categoriesSnapshot] = await Promise.all([fetchTasksForCurrentUser(), getDocs(categoriesQuery)])
+        const [fetchedTasks, categoriesSnapshot] = await Promise.all([
+          fetchTasksForCurrentUser(),
+          getDocs(categoriesQuery),
+        ]);
 
-        if (!isMounted) return
+        if (!isMounted) return;
 
         // Mark owned tasks vs shared tasks for UI (e.g. read-only for collaborators).
         const taskData: Task[] = fetchedTasks.map(({ id, data }) => {
-          const ownerId = typeof data.user_id === 'string' ? (data.user_id as string) : null
-          const isInvited = data.isInvited === true
+          const ownerId =
+            typeof data.user_id === "string" ? (data.user_id as string) : null;
+          const isInvited = data.isInvited === true;
           return {
             id,
-            ...(data as Omit<Task, 'id'>),
+            ...(data as Omit<Task, "id">),
             shared: ownerId !== user.uid,
             ownerId: ownerId,
             isInvited,
             ref: (data.ref as string | undefined) ?? id,
-          }
-        })
-        const categoryData = categoriesSnapshot.docs.map((d) => d.data() as { name?: string | null })
+          };
+        });
+        const categoryData = categoriesSnapshot.docs.map(
+          (d) => d.data() as { name?: string | null },
+        );
 
         // Track the original `order` value so we only write back changes that
         // actually need migration, rather than updating every task document.
-        const originalOrderById = new Map<string, number | null>()
+        const originalOrderById = new Map<string, number | null>();
         for (const t of taskData as Task[]) {
           originalOrderById.set(
             t.id,
-            typeof t.order === 'number' ? (t.order as number) : null,
-          )
+            typeof t.order === "number" ? (t.order as number) : null,
+          );
         }
 
-        const hasAnyMissingOrder = (taskData as Array<Record<string, unknown>>).some(
-          (t) => typeof (t as Task).order !== 'number',
-        )
+        const hasAnyMissingOrder = (
+          taskData as Array<Record<string, unknown>>
+        ).some((t) => typeof (t as Task).order !== "number");
 
         const normalizedTasks = (taskData as Task[]).map((t) => ({
           ...t,
-          order: typeof t.order === 'number' ? t.order : 0,
-        }))
+          order: typeof t.order === "number" ? t.order : 0,
+        }));
         // console.log('Loaded tasks for', user.uid, taskData.map((t) => ({ id: t.id, title: t.title, shared: t.shared })))
         const nextTasks = hasAnyMissingOrder
           ? // First-time migration: preserve existing behavior (newest first) by assigning
@@ -267,19 +315,19 @@ export function TasksPage({ mode = 'both' }: TasksPageProps) {
             [...normalizedTasks]
               .sort((a, b) => b.created_at.localeCompare(a.created_at))
               .map((t, idx) => ({ ...t, order: idx + 1 }))
-          : normalizedTasks
+          : normalizedTasks;
 
-        setTasks(nextTasks)
-        writeCachedTasks(nextTasks)
+        setTasks(nextTasks);
+        writeCachedTasks(nextTasks);
         setAvailableCategories(
           Array.from(
             new Set(
               (categoryData ?? [])
-                .map((c) => ('name' in c ? String(c.name ?? '') : '').trim())
+                .map((c) => ("name" in c ? String(c.name ?? "") : "").trim())
                 .filter((value) => value.length > 0),
             ),
           ).sort((a, b) => a.localeCompare(b)),
-        )
+        );
 
         // Persist `order` only for tasks that either:
         // - previously had no numeric `order`, or
@@ -288,95 +336,101 @@ export function TasksPage({ mode = 'both' }: TasksPageProps) {
         // exhausting Firestore write quotas on large task lists.
         if (hasAnyMissingOrder) {
           const tasksNeedingOrderUpdate = nextTasks.filter((task) => {
-            const original = originalOrderById.get(task.id)
-            if (typeof original !== 'number') return true
-            return original !== task.order
-          })
+            const original = originalOrderById.get(task.id);
+            if (typeof original !== "number") return true;
+            return original !== task.order;
+          });
 
           if (tasksNeedingOrderUpdate.length > 0) {
             try {
-              const batch = writeBatch(db)
+              const batch = writeBatch(db);
               for (const task of tasksNeedingOrderUpdate) {
-                const ref = doc(collection(db, 'tasks'), task.id)
-                batch.update(ref, { order: task.order })
+                const ref = doc(collection(db, "tasks"), task.id);
+                batch.update(ref, { order: task.order });
               }
-              await batch.commit()
+              await batch.commit();
             } catch (err) {
-              const code = (err as { code?: unknown } | null)?.code
-              if (code === 'resource-exhausted') {
+              const code = (err as { code?: unknown } | null)?.code;
+              if (code === "resource-exhausted") {
                 console.warn(
-                //   '[TasksPage] Skipped order migration writes due to Firestore resource-exhausted quota.',
+                  //   '[TasksPage] Skipped order migration writes due to Firestore resource-exhausted quota.',
                   err,
-                )
+                );
               } else {
                 console.warn(
-                // '[TasksPage] Failed to persist order migration to Firestore.',
-                 err,
-                )
+                  // '[TasksPage] Failed to persist order migration to Firestore.',
+                  err,
+                );
               }
             }
           }
         }
       } catch (err) {
-        const message = err instanceof Error ? err.message : 'Could not load tasks.'
-        if (!isMounted) return
-        setError(message)
+        const message =
+          err instanceof Error ? err.message : "Could not load tasks.";
+        if (!isMounted) return;
+        setError(message);
       } finally {
-        if (isMounted) setLoading(false)
+        if (isMounted) setLoading(false);
       }
     }
 
-    void load()
+    void load();
 
     return () => {
-      isMounted = false
-    }
-  }, [])
+      isMounted = false;
+    };
+  }, []);
 
   // When an invited task is opened, listen for real-time updates on the master task
   // and mirror those fields into the projection + UI.
   useEffect(() => {
-    const current = selectedTask
-    const user = auth.currentUser
+    const current = selectedTask;
+    const user = auth.currentUser;
 
     // Clean up any previous listener.
     if (invitedTaskUnsubscribeRef.current) {
-      invitedTaskUnsubscribeRef.current()
-      invitedTaskUnsubscribeRef.current = null
+      invitedTaskUnsubscribeRef.current();
+      invitedTaskUnsubscribeRef.current = null;
     }
 
     if (!current || !current.isInvited || !user) {
-      return
+      return;
     }
 
-    const masterId = current.ref ?? current.id
+    const masterId = current.ref ?? current.id;
 
-    const masterRef = doc(db, 'tasks', masterId)
+    const masterRef = doc(db, "tasks", masterId);
     const unsubscribe = onSnapshot(masterRef, async (snap) => {
       // If the owner deletes the master task, remove it from the collaborator's view
       // and clean up their projection document.
       if (!snap.exists()) {
-        setTasks((prev) => prev.filter((t) => t.id !== current.id))
-        setSelectedTask((prev) => (prev && prev.id === current.id ? null : prev))
+        setTasks((prev) => prev.filter((t) => t.id !== current.id));
+        setSelectedTask((prev) =>
+          prev && prev.id === current.id ? null : prev,
+        );
 
         try {
-          const invitedRef = doc(collection(db, 'userTasks', user.uid, 'tasks'), masterId)
-          await deleteDoc(invitedRef)
+          const invitedRef = doc(
+            collection(db, "userTasks", user.uid, "tasks"),
+            masterId,
+          );
+          await deleteDoc(invitedRef);
         } catch (err) {
           // console.warn('[TasksPage] Failed to delete userTasks projection after master delete', err)
         }
-        return
+        return;
       }
       const data = snap.data() as {
-        title?: string
-        description?: string | null
-        due_date?: string | null
-        priority?: string
-        category?: string | null
-        created_at?: string
-        order?: number
-        user_id?: string
-      }
+        title?: string;
+        description?: string | null;
+        due_date?: string | null;
+        priority?: string;
+        category?: string | null;
+        created_at?: string;
+        order?: number;
+        user_id?: string;
+      };
 
       setTasks((prev) =>
         prev.map((t) =>
@@ -389,14 +443,14 @@ export function TasksPage({ mode = 'both' }: TasksPageProps) {
                 priority: (data.priority as Priority | undefined) ?? t.priority,
                 category: data.category ?? t.category,
                 created_at: data.created_at ?? t.created_at,
-                order: typeof data.order === 'number' ? data.order : t.order,
+                order: typeof data.order === "number" ? data.order : t.order,
                 ownerId: data.user_id ?? t.ownerId ?? null,
                 isInvited: true,
                 ref: masterId,
               }
             : t,
         ),
-      )
+      );
 
       setSelectedTask((prev) =>
         prev && prev.id === current.id
@@ -405,21 +459,25 @@ export function TasksPage({ mode = 'both' }: TasksPageProps) {
               title: data.title ?? prev.title,
               description: data.description ?? prev.description,
               due_date: data.due_date ?? prev.due_date,
-              priority: (data.priority as Priority | undefined) ?? prev.priority,
+              priority:
+                (data.priority as Priority | undefined) ?? prev.priority,
               category: data.category ?? prev.category,
               created_at: data.created_at ?? prev.created_at,
-              order: typeof data.order === 'number' ? data.order : prev.order,
+              order: typeof data.order === "number" ? data.order : prev.order,
               ownerId: data.user_id ?? prev.ownerId ?? null,
               isInvited: true,
               ref: masterId,
             }
           : prev,
-      )
+      );
 
       // Optionally mirror the latest master fields into the invited user's projection
       // so they are available offline.
       try {
-        const invitedRef = doc(collection(db, 'userTasks', user.uid, 'tasks'), masterId)
+        const invitedRef = doc(
+          collection(db, "userTasks", user.uid, "tasks"),
+          masterId,
+        );
         await updateDoc(invitedRef, {
           title: data.title ?? current.title,
           description: data.description ?? current.description ?? null,
@@ -427,143 +485,145 @@ export function TasksPage({ mode = 'both' }: TasksPageProps) {
           priority: data.priority ?? current.priority,
           category: data.category ?? current.category ?? null,
           created_at: data.created_at ?? current.created_at,
-          order: typeof data.order === 'number' ? data.order : current.order,
+          order: typeof data.order === "number" ? data.order : current.order,
           ownerId: data.user_id ?? current.ownerId ?? null,
           updatedAt: serverTimestamp(),
-        })
+        });
       } catch (err) {
         // console.warn('[TasksPage] Failed to mirror master task into userTasks projection', err)
       }
-    })
+    });
 
-    invitedTaskUnsubscribeRef.current = unsubscribe
+    invitedTaskUnsubscribeRef.current = unsubscribe;
 
     return () => {
       if (invitedTaskUnsubscribeRef.current) {
-        invitedTaskUnsubscribeRef.current()
-        invitedTaskUnsubscribeRef.current = null
+        invitedTaskUnsubscribeRef.current();
+        invitedTaskUnsubscribeRef.current = null;
       }
-    }
-  }, [selectedTask])
+    };
+  }, [selectedTask]);
 
   useEffect(() => {
     try {
-      writeCachedTasks(tasks)
+      writeCachedTasks(tasks);
     } catch {
       // ignore write errors
     }
-  }, [tasks])
+  }, [tasks]);
 
   useEffect(() => {
     function handleOnline() {
-      setIsOffline(false)
-      void syncTasks()
+      setIsOffline(false);
+      void syncTasks();
     }
     function handleOffline() {
-      setIsOffline(true)
+      setIsOffline(true);
     }
 
-    window.addEventListener('online', handleOnline)
-    window.addEventListener('offline', handleOffline)
+    window.addEventListener("online", handleOnline);
+    window.addEventListener("offline", handleOffline);
     return () => {
-      window.removeEventListener('online', handleOnline)
-      window.removeEventListener('offline', handleOffline)
-    }
-  }, [])
+      window.removeEventListener("online", handleOnline);
+      window.removeEventListener("offline", handleOffline);
+    };
+  }, []);
 
   async function syncTasks() {
-    if (syncInFlight.current) return
-    if (!navigator.onLine) return
+    if (syncInFlight.current) return;
+    if (!navigator.onLine) return;
 
-    const user = auth.currentUser
-    if (!user) return
+    const user = auth.currentUser;
+    if (!user) return;
 
-    const queue = readOfflineQueue()
-    if (queue.length === 0) return
+    const queue = readOfflineQueue();
+    if (queue.length === 0) return;
 
-    syncInFlight.current = true
-    setIsSyncing(true)
+    syncInFlight.current = true;
+    setIsSyncing(true);
 
     // Offline sync logic:
     // - process queued operations sequentially to preserve user intent
     // - map offline-created temp IDs to server IDs, and rewrite remaining queued items + cached tasks
     try {
-      const idMap = new Map<string, string>()
+      const idMap = new Map<string, string>();
 
       for (const item of queue) {
-        if (item.type === 'create') {
-          const { tempId, task } = item.payload
-          const created = await addDoc(collection(db, 'tasks'), task)
-          idMap.set(tempId, created.id)
+        if (item.type === "create") {
+          const { tempId, task } = item.payload;
+          const created = await addDoc(collection(db, "tasks"), task);
+          idMap.set(tempId, created.id);
 
           setTasks((prev) =>
             prev.map((t) => (t.id === tempId ? { ...t, id: created.id } : t)),
-          )
-        } else if (item.type === 'update') {
-          const docId = idMap.get(item.payload.id) ?? item.payload.id
-          const ref = doc(collection(db, 'tasks'), docId)
-          await updateDoc(ref, item.payload.updates)
-        } else if (item.type === 'delete') {
-          const docId = idMap.get(item.payload.id) ?? item.payload.id
-          const ref = doc(collection(db, 'tasks'), docId)
-          await deleteDoc(ref)
-        } else if (item.type === 'reorder') {
-          const batch = writeBatch(db)
+          );
+        } else if (item.type === "update") {
+          const docId = idMap.get(item.payload.id) ?? item.payload.id;
+          const ref = doc(collection(db, "tasks"), docId);
+          await updateDoc(ref, item.payload.updates);
+        } else if (item.type === "delete") {
+          const docId = idMap.get(item.payload.id) ?? item.payload.id;
+          const ref = doc(collection(db, "tasks"), docId);
+          await deleteDoc(ref);
+        } else if (item.type === "reorder") {
+          const batch = writeBatch(db);
           for (const entry of item.payload.orders) {
-            const docId = idMap.get(entry.id) ?? entry.id
-            const ref = doc(collection(db, 'tasks'), docId)
-            batch.update(ref, { order: entry.order })
+            const docId = idMap.get(entry.id) ?? entry.id;
+            const ref = doc(collection(db, "tasks"), docId);
+            batch.update(ref, { order: entry.order });
           }
-          await batch.commit()
+          await batch.commit();
         }
       }
 
       // Rewrite queue and cached tasks with mapped IDs, then clear queue.
       if (idMap.size > 0) {
-        setTasks((prev) => prev.map((t) => ({ ...t, id: idMap.get(t.id) ?? t.id })))
+        setTasks((prev) =>
+          prev.map((t) => ({ ...t, id: idMap.get(t.id) ?? t.id })),
+        );
       }
 
-      writeOfflineQueue([])
+      writeOfflineQueue([]);
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Sync failed.'
-      setError(message)
+      const message = err instanceof Error ? err.message : "Sync failed.";
+      setError(message);
       // Keep queue so we can retry later.
     } finally {
-      syncInFlight.current = false
-      setIsSyncing(false)
+      syncInFlight.current = false;
+      setIsSyncing(false);
     }
   }
 
   function resetForm() {
-    setTitle('')
-    setDescription('')
-    setDueDate('')
-    setPriority('medium')
-    setCategory('')
+    setTitle("");
+    setDescription("");
+    setDueDate("");
+    setPriority("medium");
+    setCategory("");
   }
 
   async function handleSubmit(e: FormEvent) {
-    e.preventDefault()
-    const trimmedTitle = title.trim()
-    const trimmedDescription = description.trim()
-    const trimmedCategory = category.trim()
+    e.preventDefault();
+    const trimmedTitle = title.trim();
+    const trimmedDescription = description.trim();
+    const trimmedCategory = category.trim();
 
     if (!trimmedTitle) {
-      setError('Title is required.')
-      return
+      setError("Title is required.");
+      return;
     }
 
     if (!trimmedCategory || !dueDate) {
-      setError('Category and due date are required.')
-      return
+      setError("Category and due date are required.");
+      return;
     }
 
-    const normalizedDueDate = dueDate || null
+    const normalizedDueDate = dueDate || null;
 
     const duplicateTask = tasks.some((task) => {
-      const existingDescription = (task.description ?? '').trim()
-      const existingCategory = (task.category ?? '').trim()
-      const existingDueDate = task.due_date ?? null
+      const existingDescription = (task.description ?? "").trim();
+      const existingCategory = (task.category ?? "").trim();
+      const existingDueDate = task.due_date ?? null;
 
       return (
         task.title.trim() === trimmedTitle &&
@@ -571,24 +631,28 @@ export function TasksPage({ mode = 'both' }: TasksPageProps) {
         existingCategory === trimmedCategory &&
         existingDueDate === normalizedDueDate &&
         task.priority === priority
-      )
-    })
+      );
+    });
 
     if (duplicateTask) {
-      setError('A task with the same details already exists.')
-      return
+      setError("A task with the same details already exists.");
+      return;
     }
 
-    setSaving(true)
-    setError(null)
+    setSaving(true);
+    setError(null);
 
     try {
-      const user = auth.currentUser
-      if (!user) throw new Error('You must be signed in to manage tasks.')
+      const user = auth.currentUser;
+      if (!user) throw new Error("You must be signed in to manage tasks.");
 
-      const nowIso = new Date().toISOString()
-      const minExistingOrder = tasks.reduce((min, t) => (typeof t.order === 'number' ? Math.min(min, t.order) : min), 1)
-      const nextOrder = tasks.length === 0 ? 1 : minExistingOrder - 1
+      const nowIso = new Date().toISOString();
+      const minExistingOrder = tasks.reduce(
+        (min, t) =>
+          typeof t.order === "number" ? Math.min(min, t.order) : min,
+        1,
+      );
+      const nextOrder = tasks.length === 0 ? 1 : minExistingOrder - 1;
       const taskDoc = {
         user_id: user.uid,
         title: trimmedTitle,
@@ -600,13 +664,15 @@ export function TasksPage({ mode = 'both' }: TasksPageProps) {
         completed: false,
         order: nextOrder,
         collaborators: [],
-      }
+      };
 
       if (!navigator.onLine) {
         const tempId =
-          typeof crypto !== 'undefined' && 'randomUUID' in crypto && typeof crypto.randomUUID === 'function'
+          typeof crypto !== "undefined" &&
+          "randomUUID" in crypto &&
+          typeof crypto.randomUUID === "function"
             ? crypto.randomUUID()
-            : `local_${Date.now()}_${Math.random().toString(16).slice(2)}`
+            : `local_${Date.now()}_${Math.random().toString(16).slice(2)}`;
 
         setTasks((prev) => [
           {
@@ -623,11 +689,14 @@ export function TasksPage({ mode = 'both' }: TasksPageProps) {
             collaborators: [],
           },
           ...prev,
-        ])
+        ]);
 
-        enqueueOfflineAction({ type: 'create', payload: { tempId, task: taskDoc } })
+        enqueueOfflineAction({
+          type: "create",
+          payload: { tempId, task: taskDoc },
+        });
       } else {
-        const docRef = await addDoc(collection(db, 'tasks'), taskDoc)
+        const docRef = await addDoc(collection(db, "tasks"), taskDoc);
         setTasks((prev) => [
           {
             id: docRef.id,
@@ -644,15 +713,16 @@ export function TasksPage({ mode = 'both' }: TasksPageProps) {
             user_id: user.uid,
           },
           ...prev,
-        ])
+        ]);
       }
 
-      resetForm()
+      resetForm();
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Could not save task.'
-      setError(message)
+      const message =
+        err instanceof Error ? err.message : "Could not save task.";
+      setError(message);
     } finally {
-      setSaving(false)
+      setSaving(false);
     }
   }
 
@@ -660,33 +730,33 @@ export function TasksPage({ mode = 'both' }: TasksPageProps) {
     setEditing({
       id: task.id,
       title: task.title,
-      description: task.description ?? '',
-      due_date: task.due_date ?? '',
+      description: task.description ?? "",
+      due_date: task.due_date ?? "",
       priority: task.priority,
-      category: task.category ?? '',
-    })
+      category: task.category ?? "",
+    });
   }
 
   async function handleEditSave(e: FormEvent) {
-    e.preventDefault()
-    if (!editing) return
+    e.preventDefault();
+    if (!editing) return;
 
-    const trimmedTitle = editing.title.trim()
-    const trimmedDescription = editing.description.trim()
-    const trimmedCategory = editing.category.trim()
-    const normalizedDueDate = editing.due_date || null
+    const trimmedTitle = editing.title.trim();
+    const trimmedDescription = editing.description.trim();
+    const trimmedCategory = editing.category.trim();
+    const normalizedDueDate = editing.due_date || null;
 
     if (!trimmedTitle) {
-      setError('Title is required.')
-      return
+      setError("Title is required.");
+      return;
     }
 
     const duplicateTask = tasks.some((task) => {
-      if (task.id === editing.id) return false
+      if (task.id === editing.id) return false;
 
-      const existingDescription = (task.description ?? '').trim()
-      const existingCategory = (task.category ?? '').trim()
-      const existingDueDate = task.due_date ?? null
+      const existingDescription = (task.description ?? "").trim();
+      const existingCategory = (task.category ?? "").trim();
+      const existingDueDate = task.due_date ?? null;
 
       return (
         task.title.trim() === trimmedTitle &&
@@ -694,20 +764,20 @@ export function TasksPage({ mode = 'both' }: TasksPageProps) {
         existingCategory === trimmedCategory &&
         existingDueDate === normalizedDueDate &&
         task.priority === editing.priority
-      )
-    })
+      );
+    });
 
     if (duplicateTask) {
-      setError('Another task with the same details already exists.')
-      return
+      setError("Another task with the same details already exists.");
+      return;
     }
 
-    setSaving(true)
-    setError(null)
+    setSaving(true);
+    setError(null);
 
     try {
-      const user = auth.currentUser
-      if (!user) throw new Error('You must be signed in to manage tasks.')
+      const user = auth.currentUser;
+      if (!user) throw new Error("You must be signed in to manage tasks.");
 
       const updates = {
         title: trimmedTitle,
@@ -715,13 +785,16 @@ export function TasksPage({ mode = 'both' }: TasksPageProps) {
         due_date: normalizedDueDate,
         priority: editing.priority,
         category: trimmedCategory || null,
-      }
+      };
 
       if (!navigator.onLine) {
-        enqueueOfflineAction({ type: 'update', payload: { id: editing.id, updates } })
+        enqueueOfflineAction({
+          type: "update",
+          payload: { id: editing.id, updates },
+        });
       } else {
-        const ref = doc(collection(db, 'tasks'), editing.id)
-        await updateDoc(ref, updates)
+        const ref = doc(collection(db, "tasks"), editing.id);
+        await updateDoc(ref, updates);
       }
 
       setTasks((prev) =>
@@ -737,19 +810,20 @@ export function TasksPage({ mode = 'both' }: TasksPageProps) {
               }
             : t,
         ),
-      )
+      );
 
-      setEditing(null)
+      setEditing(null);
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Could not save task.'
-      setError(message)
+      const message =
+        err instanceof Error ? err.message : "Could not save task.";
+      setError(message);
     } finally {
-      setSaving(false)
+      setSaving(false);
     }
   }
 
   async function toggleCompleted(task: Task) {
-    const nextCompleted = !task.completed
+    const nextCompleted = !task.completed;
     try {
       setTasks((prev) =>
         prev.map((t) =>
@@ -761,7 +835,7 @@ export function TasksPage({ mode = 'both' }: TasksPageProps) {
               }
             : t,
         ),
-      )
+      );
       setSelectedTask((prev) =>
         prev && prev.id === task.id
           ? {
@@ -770,98 +844,112 @@ export function TasksPage({ mode = 'both' }: TasksPageProps) {
               completed_at: nextCompleted ? new Date().toISOString() : null,
             }
           : prev,
-      )
+      );
       const updates = {
         completed: nextCompleted,
         completed_at: nextCompleted ? new Date().toISOString() : null,
-      }
+      };
 
       if (!navigator.onLine) {
         // Offline queue currently only supports master tasks. For invited tasks we
         // update local state only; the projection will be corrected on the next load.
         if (!task.isInvited) {
-          enqueueOfflineAction({ type: 'update', payload: { id: task.id, updates } })
+          enqueueOfflineAction({
+            type: "update",
+            payload: { id: task.id, updates },
+          });
         }
       } else if (task.isInvited) {
-        const user = auth.currentUser
-        if (!user) throw new Error('You must be signed in to update shared tasks.')
-        const invitedRef = doc(collection(db, 'userTasks', user.uid, 'tasks'), task.ref ?? task.id)
+        const user = auth.currentUser;
+        if (!user)
+          throw new Error("You must be signed in to update shared tasks.");
+        const invitedRef = doc(
+          collection(db, "userTasks", user.uid, "tasks"),
+          task.ref ?? task.id,
+        );
         await updateDoc(invitedRef, {
           completed: updates.completed,
           completed_at: updates.completed_at,
           updatedAt: serverTimestamp(),
-        })
+        });
       } else {
-        const ref = doc(collection(db, 'tasks'), task.id)
-        await updateDoc(ref, updates)
+        const ref = doc(collection(db, "tasks"), task.id);
+        await updateDoc(ref, updates);
       }
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Could not update task.'
-      setError(message)
+      const message =
+        err instanceof Error ? err.message : "Could not update task.";
+      setError(message);
       // reload tasks on next mount; for now we won’t roll back immediately
     }
   }
 
   async function handleDelete(task: Task) {
-    const confirmed = window.confirm('Are you sure you want to delete this task? This action cannot be undone.')
-    if (!confirmed) return
+    const confirmed = window.confirm(
+      "Are you sure you want to delete this task? This action cannot be undone.",
+    );
+    if (!confirmed) return;
 
     try {
-      setTasks((prev) => prev.filter((t) => t.id !== task.id))
-      setSelectedTask((prev) => (prev && prev.id === task.id ? null : prev))
+      setTasks((prev) => prev.filter((t) => t.id !== task.id));
+      setSelectedTask((prev) => (prev && prev.id === task.id ? null : prev));
       if (!navigator.onLine) {
-        enqueueOfflineAction({ type: 'delete', payload: { id: task.id } })
+        enqueueOfflineAction({ type: "delete", payload: { id: task.id } });
       } else {
-        const ref = doc(collection(db, 'tasks'), task.id)
-        await deleteDoc(ref)
+        const ref = doc(collection(db, "tasks"), task.id);
+        await deleteDoc(ref);
       }
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Could not delete task.'
-      setError(message)
+      const message =
+        err instanceof Error ? err.message : "Could not delete task.";
+      setError(message);
     }
   }
 
   async function persistReorder(nextTasks: Task[]) {
-    const orders = nextTasks.map((t, idx) => ({ id: t.id, order: idx + 1 }))
-    setTasks(nextTasks.map((t, idx) => ({ ...t, order: idx + 1 })))
+    const orders = nextTasks.map((t, idx) => ({ id: t.id, order: idx + 1 }));
+    setTasks(nextTasks.map((t, idx) => ({ ...t, order: idx + 1 })));
 
     if (!navigator.onLine) {
-      enqueueOfflineAction({ type: 'reorder', payload: { orders } })
-      return
+      enqueueOfflineAction({ type: "reorder", payload: { orders } });
+      return;
     }
 
     try {
-      const batch = writeBatch(db)
+      const batch = writeBatch(db);
       for (const entry of orders) {
-        const ref = doc(collection(db, 'tasks'), entry.id)
-        batch.update(ref, { order: entry.order })
+        const ref = doc(collection(db, "tasks"), entry.id);
+        batch.update(ref, { order: entry.order });
       }
-      await batch.commit()
+      await batch.commit();
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Could not save new order.'
-      setError(message)
+      const message =
+        err instanceof Error ? err.message : "Could not save new order.";
+      setError(message);
     }
   }
 
-  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }))
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
+  );
 
   function handleDragEnd(event: DragEndEvent) {
-    if (!canReorder) return
-    const { active, over } = event
-    if (!over || active.id === over.id) return
+    if (!canReorder) return;
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
 
     // Reorder only within the currently visible list (no filters/search allowed).
-    const visible = filteredTasks
-    const oldIndex = visible.findIndex((t) => t.id === String(active.id))
-    const newIndex = visible.findIndex((t) => t.id === String(over.id))
-    if (oldIndex < 0 || newIndex < 0) return
+    const visible = filteredTasks;
+    const oldIndex = visible.findIndex((t) => t.id === String(active.id));
+    const newIndex = visible.findIndex((t) => t.id === String(over.id));
+    if (oldIndex < 0 || newIndex < 0) return;
 
-    const nextVisible = arrayMove(visible, oldIndex, newIndex)
+    const nextVisible = arrayMove(visible, oldIndex, newIndex);
 
     // Apply the reordered visible list back onto the full task list.
-    const visibleIds = new Set(nextVisible.map((t) => t.id))
-    const rest = tasks.filter((t) => !visibleIds.has(t.id))
-    void persistReorder([...nextVisible, ...rest])
+    const visibleIds = new Set(nextVisible.map((t) => t.id));
+    const rest = tasks.filter((t) => !visibleIds.has(t.id));
+    void persistReorder([...nextVisible, ...rest]);
   }
 
   function SortableTaskItem({
@@ -870,79 +958,91 @@ export function TasksPage({ mode = 'both' }: TasksPageProps) {
     disabled,
     className,
   }: {
-    task: Task
-    children: ReactNode
-    disabled: boolean
-    className?: string
+    task: Task;
+    children: ReactNode;
+    disabled: boolean;
+    className?: string;
   }) {
-    const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    const {
+      attributes,
+      listeners,
+      setNodeRef,
+      transform,
+      transition,
+      isDragging,
+    } = useSortable({
       id: task.id,
       disabled,
-    })
+    });
     const style: CSSProperties = {
       transform: CSS.Transform.toString(transform),
       transition,
       opacity: isDragging ? 0.65 : 1,
-    }
+    };
     return (
-      <li ref={setNodeRef} style={style} className={className} {...attributes} {...(disabled ? {} : listeners)}>
+      <li
+        ref={setNodeRef}
+        style={style}
+        className={className}
+        {...attributes}
+        {...(disabled ? {} : listeners)}
+      >
         {children}
       </li>
-    )
+    );
   }
 
-  const showAdd = mode === 'add' || mode === 'both'
-  const showAll = mode === 'all' || mode === 'both'
+  const showAdd = mode === "add" || mode === "both";
+  const showAll = mode === "all" || mode === "both";
 
-  const today = new Date()
-  today.setHours(0, 0, 0, 0)
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
 
   const categoryOptions = useMemo(
     () =>
       Array.from(
-        new Set(
-          [
-            ...availableCategories,
-            ...tasks
-              .map((t) => (t.category ?? '').trim())
-              .filter((value) => value.length > 0),
-          ],
-        ),
+        new Set([
+          ...availableCategories,
+          ...tasks
+            .map((t) => (t.category ?? "").trim())
+            .filter((value) => value.length > 0),
+        ]),
       ).sort((a, b) => a.localeCompare(b)),
     [availableCategories, tasks],
-  )
+  );
 
   const filteredTasks = useMemo(() => {
     return sortedTasks.filter((task) => {
       const matchesSearch =
         !search.trim() ||
         task.title.toLowerCase().includes(search.toLowerCase()) ||
-        (task.description ?? '').toLowerCase().includes(search.toLowerCase())
+        (task.description ?? "").toLowerCase().includes(search.toLowerCase());
 
-      if (!matchesSearch) return false
+      if (!matchesSearch) return false;
 
-      if (statusFilter !== 'all') {
+      if (statusFilter !== "all") {
         const isOverdue =
           !task.completed &&
           task.due_date !== null &&
           (() => {
-            const due = new Date(task.due_date as string)
-            due.setHours(0, 0, 0, 0)
-            return due < today
-          })()
+            const due = new Date(task.due_date as string);
+            due.setHours(0, 0, 0, 0);
+            return due < today;
+          })();
 
-        if (statusFilter === 'completed' && !task.completed) return false
-        if (statusFilter === 'pending' && (task.completed || isOverdue)) return false
-        if (statusFilter === 'overdue' && !isOverdue) return false
+        if (statusFilter === "completed" && !task.completed) return false;
+        if (statusFilter === "pending" && (task.completed || isOverdue))
+          return false;
+        if (statusFilter === "overdue" && !isOverdue) return false;
       }
 
-      if (categoryFilter !== 'all') {
-        if ((task.category ?? '').trim() !== categoryFilter) return false
+      if (categoryFilter !== "all") {
+        if ((task.category ?? "").trim() !== categoryFilter) return false;
       }
 
-      return true
-    })
-  }, [sortedTasks, search, statusFilter, categoryFilter, today])
+      return true;
+    });
+  }, [sortedTasks, search, statusFilter, categoryFilter, today]);
 
   return (
     <div className="tasks-shell tasks-shell--tasks">
@@ -1005,8 +1105,11 @@ export function TasksPage({ mode = 'both' }: TasksPageProps) {
               </label>
 
               <label className="field">
-                <span className='priority-label'>Priority</span>
-                <select value={priority} onChange={(e) => setPriority(e.target.value as Priority)}>
+                <span className="priority-label">Priority</span>
+                <select
+                  value={priority}
+                  onChange={(e) => setPriority(e.target.value as Priority)}
+                >
                   <option value="low">Low</option>
                   <option value="medium">Medium</option>
                   <option value="high">High</option>
@@ -1016,7 +1119,7 @@ export function TasksPage({ mode = 'both' }: TasksPageProps) {
 
             <div className="tasks-form-actions">
               <button type="submit" className="primary-btn" disabled={saving}>
-                {saving ? 'Adding…' : 'Add task'}
+                {saving ? "Adding…" : "Add task"}
               </button>
             </div>
           </form>
@@ -1041,7 +1144,9 @@ export function TasksPage({ mode = 'both' }: TasksPageProps) {
               <div className="tasks-filters">
                 <select
                   value={statusFilter}
-                  onChange={(e) => setStatusFilter(e.target.value as typeof statusFilter)}
+                  onChange={(e) =>
+                    setStatusFilter(e.target.value as typeof statusFilter)
+                  }
                 >
                   <option value="all">All statuses</option>
                   <option value="completed">Completed</option>
@@ -1050,7 +1155,9 @@ export function TasksPage({ mode = 'both' }: TasksPageProps) {
                 </select>
                 <select
                   value={categoryFilter}
-                  onChange={(e) => setCategoryFilter(e.target.value as typeof categoryFilter)}
+                  onChange={(e) =>
+                    setCategoryFilter(e.target.value as typeof categoryFilter)
+                  }
                   disabled={categoryOptions.length === 0}
                 >
                   <option value="all">All categories</option>
@@ -1094,52 +1201,67 @@ export function TasksPage({ mode = 'both' }: TasksPageProps) {
                         !task.completed &&
                         task.due_date !== null &&
                         (() => {
-                          const due = new Date(task.due_date as string)
-                          due.setHours(0, 0, 0, 0)
-                          return due < today
-                        })()
+                          const due = new Date(task.due_date as string);
+                          due.setHours(0, 0, 0, 0);
+                          return due < today;
+                        })();
 
-                      const statusLabel = task.completed ? 'Completed' : isOverdue ? 'Overdue' : 'Pending'
+                      const statusLabel = task.completed
+                        ? "Completed"
+                        : isOverdue
+                          ? "Overdue"
+                          : "Pending";
 
                       return (
                         <tr
                           key={task.id}
                           className="tasks-table-row tasks-table-row--clickable"
                           onClick={() => setSelectedTask(task)}
-                          style={{ cursor: 'pointer' }}
+                          style={{ cursor: "pointer" }}
                         >
                           <td>
                             <div className="tasks-table-title">
                               {task.shared && (
-                                  <span className="task-pill task-pill--shared">Shared</span>
-                                )}
-                              <span>
-                                {task.title}
+                                <span className="task-pill task-pill--shared">
+                                  Shared
                                 </span>
+                              )}
+                              <span>{task.title}</span>
                             </div>
                           </td>
-                          <td>{task.category ?? '—'}</td>
+                          <td>{task.category ?? "—"}</td>
                           <td>
                             {task.due_date
-                              ? new Date(task.due_date).toLocaleDateString(undefined, { dateStyle: 'medium' })
-                              : '—'}
+                              ? new Date(task.due_date).toLocaleDateString(
+                                  undefined,
+                                  { dateStyle: "medium" },
+                                )
+                              : "—"}
                           </td>
                           <td>
                             {task.priority && (
-                              <span className={`task-pill task-pill--${task.priority}`}>{task.priority}</span>
+                              <span
+                                className={`task-pill task-pill--${task.priority}`}
+                              >
+                                {task.priority}
+                              </span>
                             )}
                           </td>
                           <td>
                             <span
                               className={`task-status task-status--${
-                                task.completed ? 'completed' : isOverdue ? 'overdue' : 'pending'
+                                task.completed
+                                  ? "completed"
+                                  : isOverdue
+                                    ? "overdue"
+                                    : "pending"
                               }`}
                             >
                               {statusLabel}
                             </span>
                           </td>
                         </tr>
-                      )
+                      );
                     })}
                   </tbody>
                 </table>
@@ -1151,92 +1273,129 @@ export function TasksPage({ mode = 'both' }: TasksPageProps) {
                 </p>
               )}
 
-              <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-                <SortableContext items={filteredTasks.map((t) => t.id)} strategy={verticalListSortingStrategy}>
+              <DndContext
+                sensors={sensors}
+                collisionDetection={closestCenter}
+                onDragEnd={handleDragEnd}
+              >
+                <SortableContext
+                  items={filteredTasks.map((t) => t.id)}
+                  strategy={verticalListSortingStrategy}
+                >
                   <ul className="tasks-card-list">
                     {filteredTasks.map((task) => {
-                  const isOverdue =
-                    !task.completed &&
-                    task.due_date !== null &&
-                    (() => {
-                      const due = new Date(task.due_date as string)
-                      due.setHours(0, 0, 0, 0)
-                      return due < today
-                    })()
+                      const isOverdue =
+                        !task.completed &&
+                        task.due_date !== null &&
+                        (() => {
+                          const due = new Date(task.due_date as string);
+                          due.setHours(0, 0, 0, 0);
+                          return due < today;
+                        })();
 
-                  const statusLabel = task.completed ? 'Completed' : isOverdue ? 'Overdue' : 'Pending'
+                      const statusLabel = task.completed
+                        ? "Completed"
+                        : isOverdue
+                          ? "Overdue"
+                          : "Pending";
 
-                  return (
-                    <SortableTaskItem
-                      key={task.id}
-                      task={task}
-                      disabled={!canReorder}
-                      className={`task-item ${task.completed ? 'task-item--done' : ''}`}
-                    >
-                      <button
-                        type="button"
-                        className="task-card-button"
-                        onClick={() => setSelectedTask(task)}
-                        style={{ all: 'unset', cursor: 'pointer', display: 'block', width: '100%' }}
-                      >
-                        <div className="task-card-header">
-                        {task.shared && (
-                              <span className="task-pill task-pill--shared">Shared</span>
-                            )}
-                          <span
-                            className={`task-status task-status--${
-                              task.completed ? 'completed' : isOverdue ? 'overdue' : 'pending'
-                            } task-status--pill`}
+                      return (
+                        <SortableTaskItem
+                          key={task.id}
+                          task={task}
+                          disabled={!canReorder}
+                          className={`task-item ${task.completed ? "task-item--done" : ""}`}
+                        >
+                          <button
+                            type="button"
+                            className="task-card-button"
+                            onClick={() => setSelectedTask(task)}
+                            style={{
+                              all: "unset",
+                              cursor: "pointer",
+                              display: "block",
+                              width: "100%",
+                            }}
                           >
-                            {statusLabel}
-                          </span>
-                        </div>
-                        <div className="task-header-text">
-                            <span className="task-title">
-                              {task.title}
-                            
-                            </span>
-                          </div>
-                        <div className="task-card-body">
-                          {task.description && (
-                            <div className="task-card-row task-card-row--description">
-                              <span className="task-card-label">Description</span>
-                              <span className="task-card-value task-card-value--multiline">
-                                {task.description}
+                            <div className="task-card-header">
+                              {task.shared && (
+                                <span className="task-pill task-pill--shared">
+                                  Shared
+                                </span>
+                              )}
+                              <span
+                                className={`task-status task-status--${
+                                  task.completed
+                                    ? "completed"
+                                    : isOverdue
+                                      ? "overdue"
+                                      : "pending"
+                                } task-status--pill`}
+                              >
+                                {statusLabel}
                               </span>
                             </div>
-                          )}
-                          <div className="task-card-row">
-                            <span className="task-card-label">Category</span>
-                            <span className="task-card-value">{task.category ?? '—'}</span>
-                          </div>
-                          <div className="task-card-row">
-                            <span className="task-card-label">Priority</span>
-                            <span className="task-card-value">
-                              {task.priority && (
-                                <span className={`task-pill task-pill--${task.priority}`}>{task.priority}</span>
+                            <div className="task-header-text">
+                              <span className="task-title">{task.title}</span>
+                            </div>
+                            <div className="task-card-body">
+                              {task.description && (
+                                <div className="task-card-row task-card-row--description">
+                                  <span className="task-card-label">
+                                    Description
+                                  </span>
+                                  <span className="task-card-value task-card-value--multiline">
+                                    {task.description}
+                                  </span>
+                                </div>
                               )}
-                            </span>
-                          </div>
-                          <div className="task-card-row">
-                            <span className="task-card-label">Created</span>
-                            <span className="task-card-value">
-                              {new Date(task.created_at).toLocaleDateString(undefined, { dateStyle: 'medium' })}
-                            </span>
-                          </div>
-                          <div className="task-card-row">
-                            <span className="task-card-label">Due</span>
-                            <span className="task-card-value">
-                              {task.due_date
-                                ? new Date(task.due_date).toLocaleDateString(undefined, { dateStyle: 'medium' })
-                                : '—'}
-                            </span>
-                          </div>
-                          
-                        </div>
-                      </button>
-                    </SortableTaskItem>
-                  )
+                              <div className="task-card-row">
+                                <span className="task-card-label">
+                                  Category
+                                </span>
+                                <span className="task-card-value">
+                                  {task.category ?? "—"}
+                                </span>
+                              </div>
+                              <div className="task-card-row">
+                                <span className="task-card-label">
+                                  Priority
+                                </span>
+                                <span className="task-card-value">
+                                  {task.priority && (
+                                    <span
+                                      className={`task-pill task-pill--${task.priority}`}
+                                    >
+                                      {task.priority}
+                                    </span>
+                                  )}
+                                </span>
+                              </div>
+                              <div className="task-card-row">
+                                <span className="task-card-label">Created</span>
+                                <span className="task-card-value">
+                                  {new Date(task.created_at).toLocaleDateString(
+                                    undefined,
+                                    { dateStyle: "medium" },
+                                  )}
+                                </span>
+                              </div>
+                              <div className="task-card-row">
+                                <span className="task-card-label">Due</span>
+                                <span className="task-card-value">
+                                  {task.due_date
+                                    ? new Date(
+                                        task.due_date,
+                                      ).toLocaleDateString(undefined, {
+                                        dateStyle: "medium",
+                                      })
+                                    : "—"}
+                                </span>
+                              </div>
+                            </div>
+                          </button>
+                        </SortableTaskItem>
+                      );
                     })}
                   </ul>
                 </SortableContext>
@@ -1252,8 +1411,8 @@ export function TasksPage({ mode = 'both' }: TasksPageProps) {
           isOwner={!selectedTask.shared}
           onClose={() => setSelectedTask(null)}
           onEdit={(task: Task) => {
-            startEdit(task)
-            setSelectedTask(null)
+            startEdit(task);
+            setSelectedTask(null);
           }}
           onToggleComplete={(task: Task) => void toggleCompleted(task)}
           onDelete={(task: Task) => void handleDelete(task)}
@@ -1372,7 +1531,7 @@ export function TasksPage({ mode = 'both' }: TasksPageProps) {
 
               <div className="edit-form-actions">
                 <button type="submit" className="primary-btn" disabled={saving}>
-                  {saving ? 'Saving changes…' : 'Save changes'}
+                  {saving ? "Saving changes…" : "Save changes"}
                 </button>
                 <button
                   type="button"
@@ -1388,6 +1547,5 @@ export function TasksPage({ mode = 'both' }: TasksPageProps) {
         </div>
       )}
     </div>
-  )
+  );
 }
-
