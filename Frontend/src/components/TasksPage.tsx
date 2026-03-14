@@ -89,14 +89,14 @@ export function TasksPage({ mode = 'both' }: TasksPageProps) {
       const code = (err as { code?: unknown } | null)?.code
       if (code === 'permission-denied') {
         console.error(
-          '[TasksPage] Collaborator query denied by Firestore rules. This usually means your published rules are not applied to the project your app is using, or the tasks are not actually storing collaborator UIDs in `collaborators`.',
+          // '[TasksPage] Collaborator query denied by Firestore rules. This usually means your published rules are not applied to the project your app is using, or the tasks are not actually storing collaborator UIDs in `collaborators`.',
           err,
         )
         // Don’t fail the entire page; continue without collaborator tasks.
         collaboratorDocs = []
       } else {
         console.warn(
-          '[TasksPage] Collaborator ordered query failed (likely missing composite index). Falling back to temporary query without orderBy.',
+          // '[TasksPage] Collaborator ordered query failed (likely missing composite index). Falling back to temporary query without orderBy.',
           err,
         )
         const collaboratorSnapTemp = await getDocs(collaboratorQueryTempNoOrderBy)
@@ -140,7 +140,7 @@ export function TasksPage({ mode = 'both' }: TasksPageProps) {
       return ao - bo
     })
 
-    console.log('[TasksPage] fetched tasks for', user.uid, combined)
+    // console.log('[TasksPage] fetched tasks for', user.uid, combined)
     return combined
   }
 
@@ -260,7 +260,7 @@ export function TasksPage({ mode = 'both' }: TasksPageProps) {
           ...t,
           order: typeof t.order === 'number' ? t.order : 0,
         }))
-        console.log('Loaded tasks for', user.uid, taskData.map((t) => ({ id: t.id, title: t.title, shared: t.shared })))
+        // console.log('Loaded tasks for', user.uid, taskData.map((t) => ({ id: t.id, title: t.title, shared: t.shared })))
         const nextTasks = hasAnyMissingOrder
           ? // First-time migration: preserve existing behavior (newest first) by assigning
             // a sequential order based on created_at descending.
@@ -305,11 +305,14 @@ export function TasksPage({ mode = 'both' }: TasksPageProps) {
               const code = (err as { code?: unknown } | null)?.code
               if (code === 'resource-exhausted') {
                 console.warn(
-                  '[TasksPage] Skipped order migration writes due to Firestore resource-exhausted quota.',
+                //   '[TasksPage] Skipped order migration writes due to Firestore resource-exhausted quota.',
                   err,
                 )
               } else {
-                console.warn('[TasksPage] Failed to persist order migration to Firestore.', err)
+                console.warn(
+                // '[TasksPage] Failed to persist order migration to Firestore.',
+                 err,
+                )
               }
             }
           }
@@ -360,7 +363,7 @@ export function TasksPage({ mode = 'both' }: TasksPageProps) {
           const invitedRef = doc(collection(db, 'userTasks', user.uid, 'tasks'), masterId)
           await deleteDoc(invitedRef)
         } catch (err) {
-          console.warn('[TasksPage] Failed to delete userTasks projection after master delete', err)
+          // console.warn('[TasksPage] Failed to delete userTasks projection after master delete', err)
         }
         return
       }
@@ -429,7 +432,7 @@ export function TasksPage({ mode = 'both' }: TasksPageProps) {
           updatedAt: serverTimestamp(),
         })
       } catch (err) {
-        console.warn('[TasksPage] Failed to mirror master task into userTasks projection', err)
+        // console.warn('[TasksPage] Failed to mirror master task into userTasks projection', err)
       }
     })
 

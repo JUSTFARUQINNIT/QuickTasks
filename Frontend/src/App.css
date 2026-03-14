@@ -1194,6 +1194,10 @@
   margin-left: 5px;
 }
 
+.profile-heading {
+  margin: 0 0 4px;
+  font-size: 1.02rem;
+}
 .tasks-subtitle {
   margin: 0 0 14px;
   font-size: 0.86rem;

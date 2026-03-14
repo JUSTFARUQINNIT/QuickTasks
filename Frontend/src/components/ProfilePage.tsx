@@ -292,7 +292,7 @@ export function ProfilePage() {
                 )}
               </div>
               <div>
-                <h2 className="tasks-heading">{displayName}</h2>
+                <h2 className="profile-heading">{displayName}</h2>
                 {profile?.email && <p className="tasks-subtitle">{profile.email}</p>}
               </div>
             </div>
