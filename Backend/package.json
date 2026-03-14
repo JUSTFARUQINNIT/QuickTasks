@@ -10,6 +10,7 @@
     "test": "npm run dev"
   },
   "dependencies": {
+    "@getbrevo/brevo": "^2.2.0",
     "firebase-admin": "^13.7.0",
     "cors": "^2.8.6",
     "dotenv": "^17.3.1",
