@@ -326,41 +326,74 @@ export function CategoriesPage() {
             </p>
           </div>
         ) : (
-          <div className="tasks-table-wrapper">
-            <table className="tasks-table">
-              <thead>
-                <tr>
-                  <th>Name</th>
-                  <th>Tasks</th>
-                  <th />
-                </tr>
-              </thead>
-              <tbody>
-                {categories.map((category) => (
-                  <tr key={category.id}>
-                    <td>{category.name}</td>
-                    <td>{countsByCategory.get(category.name) ?? 0}</td>
-                    <td className="category-table-actions">
-                      <button
-                        type="button"
-                        className="task-action-btn"
-                        onClick={() => startEdit(category)}
-                      >
-                        Edit
-                      </button>
-                      <button
-                        type="button"
-                        className="task-action-btn task-action-btn--danger"
-                        onClick={() => void handleDelete(category)}
-                      >
-                        Delete
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+         <div className="tasks-table-wrapper">
+  {/* Desktop Table */}
+  <table className="tasks-table categories-table-desktop">
+    <thead>
+      <tr>
+        <th>Name</th>
+        <th>Tasks</th>
+        <th />
+      </tr>
+    </thead>
+    <tbody>
+      {categories.map((category) => (
+        <tr key={category.id}>
+          <td>{category.name}</td>
+          <td>{countsByCategory.get(category.name) ?? 0}</td>
+          <td className="category-table-actions">
+            <button
+              type="button"
+              className="task-action-btn"
+              onClick={() => startEdit(category)}
+            >
+              Edit
+            </button>
+            <button
+              type="button"
+              className="task-action-btn task-action-btn--danger"
+              onClick={() => void handleDelete(category)}
+            >
+              Delete
+            </button>
+          </td>
+        </tr>
+      ))}
+    </tbody>
+  </table>
+
+  {/* Mobile Cards */}
+  <div className="categories-cards-mobile">
+    {categories.map((category) => (
+      <div key={category.id} className="category-card">
+        <div className="category-card-header">
+          <h3>{category.name}</h3>
+          <span className="category-count">
+            {countsByCategory.get(category.name) ?? 0} tasks
+          </span>
+        </div>
+
+        <div className="category-card-actions">
+          <button
+            type="button"
+            className="task-action-btn"
+            onClick={() => startEdit(category)}
+          >
+            Edit
+          </button>
+
+          <button
+            type="button"
+            className="task-action-btn task-action-btn--danger"
+            onClick={() => void handleDelete(category)}
+          >
+            Delete
+          </button>
+        </div>
+      </div>
+    ))}
+  </div>
+</div>
         )}
       </section>
     </div>

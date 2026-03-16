@@ -47,6 +47,7 @@ import { TasksPage } from "./components/TasksPage";
 import { ProfilePage } from "./components/ProfilePage";
 import { CategoriesPage } from "./components/CategoriesPage";
 import { InvitationsPage } from "./components/InvitationsPage";
+import { TaskCommentsPage } from "./components/TaskCommentsPage";
 
 type TaskSummary = {
   id: string;
@@ -926,6 +927,10 @@ function App() {
             <Route path="/dashboard" element={<DashboardOverview />} />
             <Route path="/tasks/add" element={<TasksPage mode="add" />} />
             <Route path="/tasks/all" element={<TasksPage mode="all" />} />
+            <Route
+              path="/tasks/:taskId/comments"
+              element={<TaskCommentsPage />}
+            />
             <Route
               path="/tasks"
               element={<Navigate to="/tasks/add" replace />}

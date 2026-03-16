@@ -1,14 +1,23 @@
 import { useEffect, useState } from "react";
 import type { Task } from "../types/tasks";
-import { collection, doc, getDoc } from "firebase/firestore";
+import {
+  collection,
+  doc,
+  getDoc,
+  onSnapshot,
+  orderBy,
+  query,
+  where,
+} from "firebase/firestore";
 import { auth, db } from "../lib/firebaseClient";
+import { TaskDetailsScreen } from "./TaskDetails/TaskDetailsScreen";
+import { useNavigate } from "react-router-dom";
 
 type TaskDetailsModalProps = {
   task: Task;
   isOwner: boolean;
   onClose: () => void;
   onEdit: (task: Task) => void;
-  onToggleComplete: (task: Task) => void;
   onDelete: (task: Task) => void;
   onInviteCollaborator: () => void;
 };
@@ -18,15 +27,20 @@ export function TaskDetailsModal({
   isOwner,
   onClose,
   onEdit,
-  onToggleComplete,
   onDelete,
   onInviteCollaborator,
 }: TaskDetailsModalProps) {
+  const navigate = useNavigate();
   const [collaboratorLabels, setCollaboratorLabels] = useState<string[] | null>(
     null,
   );
   const [collaboratorsLoading, setCollaboratorsLoading] = useState(false);
   const [ownerLabel, setOwnerLabel] = useState<string | null>(null);
+  const [, setComments] = useState<
+    { id: string; userLabel: string; text: string; createdAt: string }[]
+  >([]);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiSummary, setAiSummary] = useState<string | null>(null);
 
   const currentUserId = auth.currentUser?.uid ?? null;
   const isSelfCollaborator =
@@ -124,202 +138,155 @@ export function TaskDetailsModal({
     };
   }, [task.ownerId]);
 
+  // Realtime comments for this task
+  useEffect(() => {
+    const q = query(
+      collection(db, "task_comments"),
+      where("task_id", "==", task.id),
+      orderBy("created_at", "asc"),
+    );
+
+    const unsub = onSnapshot(q, async (snap) => {
+      const items: {
+        id: string;
+        userLabel: string;
+        text: string;
+        createdAt: string;
+      }[] = [];
+
+      for (const d of snap.docs) {
+        const data = d.data() as {
+          user_id?: string;
+          comment_text?: string;
+          created_at?: string;
+        };
+        let userLabel = data.user_id ?? "Unknown user";
+        if (data.user_id) {
+          try {
+            const pref = doc(collection(db, "profiles"), data.user_id);
+            const psnap = await getDoc(pref);
+            if (psnap.exists()) {
+              const pdata = psnap.data() as {
+                email?: string | null;
+                username?: string | null;
+              };
+              userLabel =
+                pdata.username ?? pdata.email ?? (data.user_id as string);
+            }
+          } catch {
+            // ignore
+          }
+        }
+        items.push({
+          id: d.id,
+          userLabel,
+          text: data.comment_text ?? "",
+          createdAt: data.created_at ?? "",
+        });
+      }
+
+      setComments(items);
+    });
+
+    return () => unsub();
+  }, [task.id]);
+
+  async function handleLoadAiSuggestions() {
+    const user = auth.currentUser;
+    if (!user) {
+      alert("You must be signed in to get suggestions.");
+      return;
+    }
+    setAiLoading(true);
+    setAiSummary(null);
+    try {
+      const token = await user.getIdToken();
+      const apiBase = import.meta.env.VITE_API_BASE_URL;
+      const res = await fetch(
+        `${apiBase}/api/tasks/${encodeURIComponent(task.id)}/ai-suggestions`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        },
+      );
+      if (!res.ok) {
+        const body = (await res.json().catch(() => null)) as {
+          error?: string;
+        } | null;
+        throw new Error(body?.error ?? "Failed to load suggestions.");
+      }
+      const body = (await res.json()) as {
+        priority?: { priority: string; score: number; reason: string };
+        patterns?: {
+          recurrentSuggestions?: {
+            sampleTaskTitle?: string;
+            recurrence?: string;
+            confidence?: number;
+          }[];
+          deadlineSuggestion?: {
+            averageDaysToComplete?: number;
+            confidence?: number;
+          } | null;
+        };
+      };
+
+      const parts: string[] = [];
+      if (body.priority) {
+        parts.push(
+          `Suggested priority: ${body.priority.priority.toUpperCase()} (score ${body.priority.score}).`,
+        );
+      }
+      if (body.patterns?.deadlineSuggestion) {
+        const d = body.patterns.deadlineSuggestion;
+        parts.push(
+          `Average completion time: ~${d.averageDaysToComplete?.toFixed(
+            1,
+          )} days (confidence ${Math.round((d.confidence ?? 0) * 100)}%).`,
+        );
+      }
+      if (body.patterns?.recurrentSuggestions?.length) {
+        const first = body.patterns.recurrentSuggestions[0];
+        parts.push(
+          `Recurring pattern detected: ${first.recurrence} tasks like “${
+            first.sampleTaskTitle ?? "task"
+          }” (confidence ${Math.round((first.confidence ?? 0) * 100)}%).`,
+        );
+      }
+      setAiSummary(parts.join(" "));
+    } catch (err) {
+      const msg =
+        err instanceof Error ? err.message : "Could not load suggestions.";
+      alert(msg);
+    } finally {
+      setAiLoading(false);
+    }
+  }
+
   return (
-    <div className="modal-overlay" role="dialog" aria-modal="true">
-      <div className="modal-card">
-        <h2 className="modal-title">Task details</h2>
-        <p className="modal-subtitle">Review and manage this task.</p>
-
-        {/* Notice for collaborators */}
-        {!isOwner && (task.isInvited || isSelfCollaborator) && (
-          <div className="task-card-row">
-            <span className="task-card-label" />
-            <span
-              className="task-card-value task-card-value--multiline"
-              style={{
-                color: "#cf1818",
-                textAlign: "center",
-                marginBottom: 12,
-              }}
-            >
-              You can mark this task as complete, but editing is restricted.
-              Other collaborators are visible below.
-            </span>
-          </div>
-        )}
-
-        <div className="tasks-details">
-          <div className="task-card-row">
-            <span className="task-card-label">Title</span>
-            <span className="task-card-value">{task.title}</span>
-          </div>
-
-          {roleLabel && (
-            <div className="task-card-row">
-              <span className="task-card-label">Role</span>
-              <span className="task-card-value">
-                <span
-                  className={`task-pill ${
-                    roleLabel === "Owner"
-                      ? "task-pill--owner"
-                      : "task-pill--collaborator"
-                  }`}
-                >
-                  {roleLabel === "Owner" ? "👑 Owner" : "🤝 Collaborator"}
-                </span>
-              </span>
-            </div>
-          )}
-
-          {ownerLabel && (
-            <div className="task-card-row">
-              <span className="task-card-label">Owner</span>
-              <span className="task-card-value">{ownerLabel}</span>
-            </div>
-          )}
-
-          {task.description && (
-            <div className="task-card-row">
-              <span className="task-card-label">Description</span>
-              <span className="task-card-value task-card-value--multiline">
-                {task.description}
-              </span>
-            </div>
-          )}
-
-          <div className="task-card-row">
-            <span className="task-card-label">Category</span>
-            <span className="task-card-value">{task.category ?? "—"}</span>
-          </div>
-
-          <div className="task-card-row">
-            <span className="task-card-label">Priority</span>
-            <span className="task-card-value">
-              <span className={`task-pill task-pill--${task.priority}`}>
-                {task.priority}
-              </span>
-            </span>
-          </div>
-
-          <div className="task-card-row">
-            <span className="task-card-label">Due date</span>
-            <span className="task-card-value">
-              {task.due_date
-                ? new Date(task.due_date).toLocaleDateString(undefined, {
-                    dateStyle: "medium",
-                  })
-                : "—"}
-            </span>
-          </div>
-
-          <div className="task-card-row">
-            <span className="task-card-label">Created</span>
-            <span className="task-card-value">
-              {new Date(task.created_at).toLocaleDateString(undefined, {
-                dateStyle: "medium",
-              })}
-            </span>
-          </div>
-
-          <div className="task-card-row">
-            <span className="task-card-label">Status</span>
-            <span className="task-card-value">
-              <span
-                className={`task-status task-status--${
-                  task.completed ? "completed" : "pending"
-                } task-status--pill`}
-              >
-                {task.completed ? "Completed" : "Pending"}
-              </span>
-            </span>
-          </div>
-
-          {task.assigned_email && (
-            <div className="task-card-row">
-              <span className="task-card-label">Assigned email</span>
-              <span className="task-card-value">{task.assigned_email}</span>
-            </div>
-          )}
-
-          <div className="task-card-row">
-            <span className="task-card-label">Collaborators</span>
-            <span className="task-card-value task-card-value--multiline">
-              {collaboratorsLoading
-                ? "Loading team..."
-                : collaboratorLabels && collaboratorLabels.length > 0
-                  ? collaboratorLabels.join(", ")
-                  : "No collaborators yet"}
-            </span>
-          </div>
-        </div>
-
-        <div
-          className="collaborators-form-actions"
-          style={{ marginTop: 24, justifyContent: "space-between" }}
-        >
-          {isOwner ? (
-            <>
-              <button
-                type="button"
-                className="primary-btn"
-                onClick={() => onEdit(task)}
-              >
-                Edit task
-              </button>
-              <div
-                style={{
-                  marginTop: 18,
-                  marginBottom: 10,
-                  display: "flex",
-                  gap: 8,
-                  flexWrap: "wrap",
-                  width: "100%",
-                  justifyContent: "space-between",
-                }}
-              >
-                <button
-                  type="button"
-                  className="secondary-btn task-action-btn"
-                  onClick={onInviteCollaborator}
-                >
-                  Invite collaborator
-                </button>
-                <button
-                  type="button"
-                  className="secondary-btn task-action-btn"
-                  onClick={() => onToggleComplete(task)}
-                >
-                  {task.completed ? "Undo complete" : "Mark complete"}
-                </button>
-                <button
-                  type="button"
-                  className="task-action-btn task-action-btn--danger"
-                  onClick={() => onDelete(task)}
-                >
-                  Delete task
-                </button>
-              </div>
-            </>
-          ) : task.isInvited ? (
-            <button
-              type="button"
-              className="primary-btn collaborator"
-              onClick={() => onToggleComplete(task)}
-            >
-              {task.completed ? "Mark as not done" : "Mark as done"}
-            </button>
-          ) : null}
-          {/* </div> */}
-
-          <button
-            type="button"
-            className="ghost-btn tasks-cancel-btn"
-            onClick={onClose}
-          >
-            Close
-          </button>
-        </div>
-      </div>
+    <div
+      className="modal-overlay modal-overlay--fullscreen"
+      role="dialog"
+      aria-modal="true"
+    >
+      <TaskDetailsScreen
+        task={task}
+        isOwner={isOwner}
+        ownerLabel={ownerLabel}
+        roleLabel={roleLabel}
+        collaboratorsLoading={collaboratorsLoading}
+        collaboratorLabels={collaboratorLabels}
+        aiSummary={aiSummary}
+        aiLoading={aiLoading}
+        onBack={onClose}
+        onEdit={() => onEdit(task)}
+        onDelete={() => onDelete(task)}
+        onInviteCollaborator={onInviteCollaborator}
+        onOpenComments={() => {
+          navigate(`/tasks/${encodeURIComponent(task.id)}/comments`);
+        }}
+        onLoadAiSuggestions={handleLoadAiSuggestions}
+      />
     </div>
   );
 }

@@ -1,5 +1,25 @@
 export type Priority = "low" | "medium" | "high";
 
+export type Subtask = {
+  id: string;
+  text: string;
+  completed: boolean;
+  completed_by?: string | null; // UID of who completed it
+  assigned_to?: string | null; // UID of assigned collaborator
+  created_at: string;
+  completed_at?: string | null;
+};
+
+export type Attachment = {
+  id: string;
+  name: string;
+  type: string;
+  size: number;
+  url: string;
+  uploaded_by: string;
+  uploaded_at: string;
+};
+
 export type Task = {
   id: string;
   title: string;
@@ -16,6 +36,8 @@ export type Task = {
   assigned_email?: string | null;
   created_by?: string | null;
   collaborators?: string[];
+  subtasks?: Subtask[];
+  attachments?: Attachment[];
   /**
    * Owner UID for the master task (from `tasks/{taskId}.user_id`).
    * For invited tasks this is the original owner; for owned tasks it matches the current user.

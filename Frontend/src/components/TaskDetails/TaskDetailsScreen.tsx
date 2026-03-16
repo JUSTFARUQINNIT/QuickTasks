@@ -1,0 +1,821 @@
+import type { Task } from "../../types/tasks";
+import { TaskHeader } from "./TaskHeader";
+import { ProfileModal } from "./ProfileModal";
+import { SubtaskModal } from "../SubtaskModal";
+import { useState, useRef, useEffect } from "react";
+import {
+  HiPlus,
+  HiCheck,
+  HiCalendar,
+  HiClock,
+  HiUserCircle,
+  HiCheckCircle,
+  HiUserPlus,
+  HiShare,
+  HiChatBubbleLeft,
+  HiDocument,
+  HiPhoto,
+  HiVideoCamera,
+  HiArchiveBox,
+  HiTableCells,
+  HiDocumentText,
+  HiComputerDesktop,
+  HiArrowDownTray,
+  HiTrash,
+  HiPencil,
+} from "react-icons/hi2";
+import { auth, db } from "../../lib/firebaseClient";
+import {
+  doc,
+  updateDoc,
+  arrayUnion,
+  getDoc,
+  addDoc,
+  collection,
+} from "firebase/firestore";
+import {
+  getStorage as getFirebaseStorage,
+  ref as storageRef,
+  uploadBytes,
+  getDownloadURL,
+} from "firebase/storage";
+
+type TaskDetailsScreenProps = {
+  task: Task;
+  isOwner: boolean;
+  ownerLabel: string | null;
+  roleLabel: string | null;
+  collaboratorsLoading: boolean;
+  collaboratorLabels: string[] | null;
+  aiSummary: string | null;
+  aiLoading: boolean;
+  onBack: () => void;
+  onEdit: () => void;
+  onDelete: () => void;
+  onInviteCollaborator: () => void;
+  onOpenComments: () => void;
+  onLoadAiSuggestions: () => void;
+};
+
+export function TaskDetailsScreen({
+  task,
+  isOwner,
+  ownerLabel,
+  roleLabel,
+  collaboratorsLoading,
+  collaboratorLabels,
+  aiSummary,
+  aiLoading,
+  onBack,
+  onEdit,
+  onDelete,
+  onInviteCollaborator,
+  onOpenComments,
+  onLoadAiSuggestions,
+}: TaskDetailsScreenProps) {
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [uploading, setUploading] = useState(false);
+  const [selectedProfile, setSelectedProfile] = useState<{
+    id: string;
+    name: string;
+    email: string;
+    avatarUrl?: string | null;
+    avatarData?: string | null;
+    role: string;
+  } | null>(null);
+  const [profileModalOpen, setProfileModalOpen] = useState(false);
+  const [profileData, setProfileData] = useState<{ [key: string]: any }>({});
+  const [subtaskModalOpen, setSubtaskModalOpen] = useState(false);
+
+  // Use real subtasks from database or empty array
+  const subtasks = task.subtasks || [];
+
+  // Use real attachments from database or empty array
+  const attachments = task.attachments || [];
+
+  // Load profile data for collaborators and owner
+  useEffect(() => {
+    const loadProfileData = async () => {
+      const profiles: { [key: string]: any } = {};
+      const userIds = new Set<string>();
+
+      // Add owner ID
+      if (task.ownerId) {
+        userIds.add(task.ownerId);
+      }
+
+      // Add collaborator IDs
+      if (task.collaborators) {
+        task.collaborators.forEach((id) => userIds.add(id));
+      }
+
+      // Load profiles for all users
+      for (const userId of userIds) {
+        try {
+          const profileRef = doc(db, "profiles", userId);
+          const profileSnap = await getDoc(profileRef);
+          if (profileSnap.exists()) {
+            profiles[userId] = profileSnap.data();
+          }
+        } catch (error) {
+          console.error(`Error loading profile for ${userId}:`, error);
+        }
+      }
+
+      setProfileData(profiles);
+    };
+
+    loadProfileData();
+  }, [task.ownerId, task.collaborators]);
+
+  const toggleSubtask = async (subtaskId: string) => {
+    const subtask = subtasks.find(st => st.id === subtaskId);
+    if (!subtask) return;
+
+    // Check if user can complete this subtask
+    const currentUser = auth.currentUser;
+    if (!currentUser) return;
+
+    // Owner can complete any subtask
+    // Collaborators can only complete subtasks assigned to them or unassigned ones
+    if (!isOwner && subtask.assigned_to && subtask.assigned_to !== currentUser.uid) {
+      alert("You can only complete subtasks assigned to you.");
+      return;
+    }
+
+    try {
+      const taskRef = doc(db, "tasks", task.id);
+      const updatedSubtasks = subtasks.map(st => {
+        if (st.id === subtaskId) {
+          const isCompleting = !st.completed;
+          return {
+            ...st,
+            completed: isCompleting,
+            completed_by: isCompleting ? currentUser.uid : null,
+            completed_at: isCompleting ? new Date().toISOString() : null
+          };
+        }
+        return st;
+      });
+
+      // Calculate progress
+      const completedCount = updatedSubtasks.filter(st => st.completed).length;
+      const totalCount = updatedSubtasks.length;
+      const progress = totalCount > 0 ? (completedCount / totalCount) * 100 : 0;
+
+      // Update task with new subtasks and potentially new completion status
+      const updateData: any = { subtasks: updatedSubtasks };
+      
+      // Auto-mark task as completed when 100% progress
+      if (progress === 100 && !task.completed) {
+        updateData.completed = true;
+        updateData.completed_at = new Date().toISOString();
+      } else if (progress < 100 && task.completed) {
+        updateData.completed = false;
+        updateData.completed_at = null;
+      }
+
+      await updateDoc(taskRef, updateData);
+    } catch (error) {
+      console.error("Error updating subtask:", error);
+      alert("Failed to update subtask. Please try again.");
+    }
+  };
+
+  const addNewSubtask = () => {
+    if (!isOwner) return;
+    setSubtaskModalOpen(true);
+  };
+
+  const handleSubtasksCreated = async (newSubtasks: any[]) => {
+    try {
+      const taskRef = doc(db, "tasks", task.id);
+      await updateDoc(taskRef, {
+        subtasks: arrayUnion(...newSubtasks)
+      });
+    } catch (error) {
+      console.error("Error adding subtasks:", error);
+      alert("Failed to add subtasks. Please try again.");
+    }
+  };
+
+  const getFileTypeIcon = (fileName: string) => {
+    const extension = fileName.split(".").pop()?.toLowerCase();
+    
+    switch (extension) {
+      case "pdf":
+        return { icon: HiDocument, color: "#ef4444", label: "PDF" };
+      case "doc":
+      case "docx":
+        return { icon: HiDocumentText, color: "#3b82f6", label: "DOC" };
+      case "txt":
+        return { icon: HiDocumentText, color: "#6b7280", label: "TXT" };
+      case "jpg":
+      case "jpeg":
+      case "png":
+      case "gif":
+      case "svg":
+      case "webp":
+        return { icon: HiPhoto, color: "#10b981", label: "IMG" };
+      case "mp4":
+      case "avi":
+      case "mov":
+      case "wmv":
+        return { icon: HiVideoCamera, color: "#f59e0b", label: "VID" };
+      case "xls":
+      case "xlsx":
+        return { icon: HiTableCells, color: "#10b981", label: "XLS" };
+      case "ppt":
+      case "pptx":
+        return { icon: HiComputerDesktop, color: "#f59e0b", label: "PPT" };
+      case "zip":
+      case "rar":
+      case "7z":
+      case "tar":
+      case "gz":
+        return { icon: HiArchiveBox, color: "#8b5cf6", label: "ARCH" };
+      default:
+        return { icon: HiDocument, color: "#6b7280", label: "FILE" };
+    }
+  };
+
+  const handleFileUpload = async (
+    event: React.ChangeEvent<HTMLInputElement>,
+  ) => {
+    const files = event.target.files;
+    if (!files || files.length === 0) return;
+
+    const file = files[0];
+    if (!isOwner) {
+      alert("Only the task owner can upload files.");
+      return;
+    }
+
+    setUploading(true);
+
+    try {
+      const storage = getFirebaseStorage();
+      const fileRef = storageRef(
+        storage,
+        `tasks/${task.id}/${Date.now()}_${file.name}`,
+      );
+
+      // Upload file to Firebase Storage
+      await uploadBytes(fileRef, file);
+      const downloadURL = await getDownloadURL(fileRef);
+
+      // Create attachment object
+      const attachment = {
+        id: Date.now().toString(),
+        name: file.name,
+        type: file.type || "application/octet-stream",
+        size: file.size,
+        url: downloadURL,
+        uploaded_by: auth.currentUser?.uid || "",
+        uploaded_at: new Date().toISOString(),
+      };
+
+      // Update task document with new attachment
+      const taskRef = doc(db, "tasks", task.id);
+      await updateDoc(taskRef, {
+        attachments: arrayUnion(attachment),
+      });
+
+      // Clear file input
+      if (fileInputRef.current) {
+        fileInputRef.current.value = "";
+      }
+    } catch (error) {
+      console.error("Error uploading file:", error);
+      alert("Failed to upload file. Please try again.");
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const downloadFile = (attachment: any) => {
+    window.open(attachment.url, "_blank");
+  };
+
+  const deleteFile = async (attachmentId: string) => {
+    if (!isOwner) {
+      alert("Only the task owner can delete files.");
+      return;
+    }
+
+    if (!confirm("Are you sure you want to delete this file?")) return;
+
+    try {
+      const taskRef = doc(db, "tasks", task.id);
+      const updatedAttachments = attachments.filter(att => att.id !== attachmentId);
+      await updateDoc(taskRef, { attachments: updatedAttachments });
+    } catch (error) {
+      console.error("Error deleting file:", error);
+      alert("Failed to delete file. Please try again.");
+    }
+  };
+
+  const updateFile = async (attachmentId: string, newFile: File) => {
+    if (!isOwner) {
+      alert("Only the task owner can update files.");
+      return;
+    }
+
+    try {
+      const storage = getFirebaseStorage();
+      const fileRef = storageRef(storage, `tasks/${task.id}/${Date.now()}_${newFile.name}`);
+      
+      // Upload new file
+      await uploadBytes(fileRef, newFile);
+      const downloadURL = await getDownloadURL(fileRef);
+      
+      // Create updated attachment object
+      const updatedAttachment = {
+        id: attachmentId,
+        name: newFile.name,
+        type: newFile.type || "application/octet-stream",
+        size: newFile.size,
+        url: downloadURL,
+        uploaded_by: auth.currentUser?.uid || "",
+        uploaded_at: new Date().toISOString(),
+      };
+
+      // Update task document
+      const taskRef = doc(db, "tasks", task.id);
+      const updatedAttachments = attachments.map(att => 
+        att.id === attachmentId ? updatedAttachment : att
+      );
+      await updateDoc(taskRef, { attachments: updatedAttachments });
+    } catch (error) {
+      console.error("Error updating file:", error);
+      alert("Failed to update file. Please try again.");
+    }
+  };
+
+  const handleProfileClick = (userId: string, role: string) => {
+    const profile = profileData[userId];
+    if (profile) {
+      setSelectedProfile({
+        id: userId,
+        name: profile.username || profile.email || "Unknown User",
+        email: profile.email || "No email",
+        avatarUrl: profile.avatar_url,
+        avatarData: profile.avatar_data,
+        role: role,
+      });
+      setProfileModalOpen(true);
+    }
+  };
+
+  const closeProfileModal = () => {
+    setProfileModalOpen(false);
+    setSelectedProfile(null);
+  };
+
+  const calculateProgress = () => {
+    if (subtasks.length === 0) return 0;
+    const completedCount = subtasks.filter(st => st.completed).length;
+    return Math.round((completedCount / subtasks.length) * 100);
+  };
+
+  const canCompleteSubtask = (subtask: any) => {
+    const currentUser = auth.currentUser;
+    if (!currentUser) return false;
+    
+    // Owner can complete any subtask
+    if (isOwner) return true;
+    
+    // Collaborators can ONLY complete subtasks explicitly assigned to them
+    // Unassigned subtasks cannot be completed by non-owners
+    return subtask.assigned_to === currentUser.uid;
+  };
+
+  const getSubtaskAssignee = (assignedTo: string | null | undefined) => {
+    if (!assignedTo) return null;
+    const profile = profileData[assignedTo];
+    return profile?.username || profile?.email || 'Unknown';
+  };
+
+  const getStatusClass = () => {
+    if (task.completed) return "task-status-completed";
+    return "task-status-in-process";
+  };
+
+  const getStatusText = () => {
+    if (task.completed) return "Completed";
+    return "In Process";
+  };
+
+  const getPriorityClass = () => {
+    switch (task.priority) {
+      case "high":
+        return "task-priority-high";
+      case "medium":
+        return "task-priority-medium";
+      case "low":
+        return "task-priority-low";
+      default:
+        return "task-priority-medium";
+    }
+  };
+
+  return (
+    <div className="task-details-fullscreen">
+      <TaskHeader isOwner={isOwner} onBack={onBack} onEdit={onEdit} />
+
+      <div className="task-details-layout">
+        <div className="task-details-main">
+          {/* Task Title Section */}
+          <section className="task-details-section-top">
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
+              <h3 className="task-section-title" style={{ margin: 0 }}>Task Title</h3>
+              <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                {task.shared && (
+                  <div className="task-shared-indicator">
+                    <HiShare className="task-shared-icon" />
+                    <span>Shared</span>
+                  </div>
+                )}
+                <button 
+                  className="task-comments-btn"
+                  onClick={onOpenComments}
+                  title="View Comments"
+                >
+                  <HiChatBubbleLeft />
+                  <span>Comments</span>
+                </button>
+              </div>
+            </div>
+            <h1 className="task-details-title">{task.title}</h1>
+            <div className="task-details-header-meta">
+              <span className={`task-pill ${getPriorityClass()}`}>
+                {task.priority?.toUpperCase() || "MEDIUM"}
+              </span>
+              <span className={`task-status ${getStatusClass()}`}>
+                {getStatusText()}
+              </span>
+            </div>
+          </section>
+
+          {/* Team Members Section */}
+          <section className="task-details-section-second">
+            <h3 className="task-section-title">Team Members</h3>
+            <div className="task-team-members">
+              {/* Show owner first */}
+              {task.ownerId && profileData[task.ownerId] && (
+                <div
+                  className="task-member-avatar"
+                  onClick={() => handleProfileClick(task.ownerId!, "Owner")}
+                  title={`${profileData[task.ownerId].username || profileData[task.ownerId].email} (Owner)`}
+                >
+                  {profileData[task.ownerId].avatar_data ||
+                  profileData[task.ownerId].avatar_url ? (
+                    <img
+                      src={
+                        profileData[task.ownerId].avatar_data ||
+                        profileData[task.ownerId].avatar_url ||
+                        ""
+                      }
+                      alt={
+                        profileData[task.ownerId].username ||
+                        profileData[task.ownerId].email
+                      }
+                    />
+                  ) : (
+                    (
+                      profileData[task.ownerId].username ||
+                      profileData[task.ownerId].email ||
+                      "U"
+                    )
+                      .charAt(0)
+                      .toUpperCase()
+                  )}
+                </div>
+              )}
+
+              {/* Show collaborators */}
+              {task.collaborators &&
+                task.collaborators.length > 0 &&
+                task.collaborators.slice(0, 3).map((collaboratorId) => {
+                  const profile = profileData[collaboratorId];
+                  if (!profile) return null;
+
+                  return (
+                    <div
+                      key={collaboratorId}
+                      className="task-member-avatar"
+                      onClick={() =>
+                        handleProfileClick(collaboratorId, "Collaborator")
+                      }
+                      title={`${profile.username || profile.email} (Collaborator)`}
+                    >
+                      {profile.avatar_data || profile.avatar_url ? (
+                        <img
+                          src={profile.avatar_data || profile.avatar_url || ""}
+                          alt={profile.username || profile.email}
+                        />
+                      ) : (
+                        (profile.username || profile.email || "C")
+                          .charAt(0)
+                          .toUpperCase()
+                      )}
+                    </div>
+                  );
+                })}
+
+              {/* Show more indicator if there are additional collaborators */}
+              {task.collaborators && task.collaborators.length > 3 && (
+                <div className="task-members-more">
+                  +{task.collaborators.length - 3}
+                </div>
+              )}
+
+              {/* Fallback if no data loaded yet */}
+              {(!profileData || Object.keys(profileData).length === 0) && (
+                <>
+                  <div className="task-member-avatar">U</div>
+                  <div className="task-member-avatar">T</div>
+                  <div className="task-member-avatar">S</div>
+                </>
+              )}
+            </div>
+          </section>
+
+          {/* Project Description Section */}
+          <section className="task-details-section-third">
+            <h3 className="task-section-title">Project Description</h3>
+            <p className="task-description">
+              {task.description ||
+                "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat."}
+            </p>
+          </section>
+
+          {/* File & Links Section */}
+          <section className="task-details-section">
+            <h3 className="task-section-title">File & Links</h3>
+            <div className="task-files-links">
+              {attachments.map((attachment) => {
+                const fileIcon = getFileTypeIcon(attachment.name);
+                const IconComponent = fileIcon.icon;
+                return (
+                  <div
+                    key={attachment.id}
+                    className="task-file-item"
+                    onClick={() => downloadFile(attachment)}
+                    style={{ cursor: "pointer" }}
+                  >
+                    <div 
+                      className="task-file-icon" 
+                      style={{ color: fileIcon.color }}
+                    >
+                      <IconComponent />
+                    </div>
+                    <div className="task-file-info">
+                      <div className="task-file-name">{attachment.name}</div>
+                      <div className="task-file-meta">
+                        <span className="task-file-size">
+                          {(attachment.size / 1024).toFixed(1)} KB
+                        </span>
+                        <span className="task-file-type">{fileIcon.label}</span>
+                      </div>
+                    </div>
+                    <div className="task-file-actions">
+                      <button
+                        className="task-file-action-btn download"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          downloadFile(attachment);
+                        }}
+                        title="Download file"
+                      >
+                        <HiArrowDownTray />
+                      </button>
+                      {isOwner && (
+                        <>
+                          <button
+                            className="task-file-action-btn update"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              const input = document.createElement('input');
+                              input.type = 'file';
+                              input.onchange = (event) => {
+                                const file = (event.target as HTMLInputElement).files?.[0];
+                                if (file) updateFile(attachment.id, file);
+                              };
+                              input.click();
+                            }}
+                            title="Update file"
+                          >
+                            <HiPencil />
+                          </button>
+                          <button
+                            className="task-file-action-btn delete"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              deleteFile(attachment.id);
+                            }}
+                            title="Delete file"
+                          >
+                            <HiTrash />
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+              {isOwner && (
+                <>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    onChange={handleFileUpload}
+                    style={{ display: "none" }}
+                    accept="*/*"
+                  />
+                  <button
+                    className="task-add-file"
+                    title={uploading ? "Uploading..." : "Add file"}
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={uploading}
+                  >
+                    {uploading ? "+" : <HiPlus />}
+                  </button>
+                </>
+              )}
+            </div>
+          </section>
+          {/* Task List Section */}
+          <section className="task-details-section">
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+              }}
+            >
+              <h3 className="new-task-title" style={{ margin: 0 }}>
+                Task
+              </h3>
+              {isOwner && (
+                <span className="task-add-subtask" onClick={addNewSubtask}>
+                  <span className="task-add-subtask-icon">
+                    <HiPlus />
+                  </span>
+                  Add new task
+                </span>
+              )}
+            </div>
+            <div className="task-subtasks">
+              {subtasks.length === 0 ? (
+                <p
+                  style={{ color: "var(--qt-text-soft)", fontStyle: "italic" }}
+                >
+                  No subtasks yet.{" "}
+                  {isOwner && "Click 'Add new task' to create one."}
+                </p>
+              ) : (
+                subtasks.map((subtask) => (
+                  <div key={subtask.id} className="task-subtask-item">
+                    <button
+                      className={`task-subtask-checkbox ${subtask.completed ? "checked" : ""} ${!canCompleteSubtask(subtask) ? "disabled" : ""}`}
+                      onClick={() => toggleSubtask(subtask.id)}
+                      disabled={!canCompleteSubtask(subtask)}
+                      title={!canCompleteSubtask(subtask) ? "You can only complete subtasks assigned to you" : "Toggle completion"}
+                    >
+                      {subtask.completed && <HiCheck />}
+                    </button>
+                    <span className={`task-subtask-text ${subtask.completed ? "completed" : ""}`}>
+                      {subtask.text}
+                    </span>
+                    {subtask.assigned_to && (
+                      <span className="subtask-assignee">
+                        {getSubtaskAssignee(subtask.assigned_to)}
+                      </span>
+                    )}
+                    {subtask.completed_by && (
+                      <span className="subtask-completed-by">
+                        by {getSubtaskAssignee(subtask.completed_by)}
+                      </span>
+                    )}
+                  </div>
+                ))
+              )}
+            </div>
+          </section>
+
+          {/* Task Information Section */}
+          <section className="task-details-section">
+            <h3 className="task-info-title">Task Information</h3>
+            <div className="task-info-grid">
+              {task.due_date && (
+                <div className="task-info-item">
+                  <HiCalendar className="task-info-icon" />
+                  <div className="task-info-content">
+                    <span className="task-info-label">Due Date</span>
+                    <span className="task-info-value">
+                      {new Date(task.due_date).toLocaleDateString(undefined, {
+                        weekday: "short",
+                        year: "numeric",
+                        month: "short",
+                        day: "numeric",
+                      })}
+                    </span>
+                  </div>
+                </div>
+              )}
+
+              <div className="task-info-item">
+                <HiClock className="task-info-icon" />
+                <div className="task-info-content">
+                  <span className="task-info-label">Created</span>
+                  <span className="task-info-value">
+                    {new Date(task.created_at).toLocaleDateString(undefined, {
+                      weekday: "short",
+                      year: "numeric",
+                      month: "short",
+                      day: "numeric",
+                    })}
+                  </span>
+                </div>
+              </div>
+
+              <div className="task-info-item">
+                <HiUserCircle className="task-info-icon" />
+                <div className="task-info-content">
+                  <span className="task-info-label">Your Role</span>
+                  <span className="task-info-value">
+                    {roleLabel || "Viewer"}
+                  </span>
+                </div>
+              </div>
+
+              <div className="task-info-item">
+                <HiCheckCircle className="task-info-icon" />
+                <div className="task-info-content">
+                  <span className="task-info-label">Completed Tasks</span>
+                  <span className="task-info-value">
+                    {subtasks.filter((st) => st.completed).length} /{" "}
+                    {subtasks.length}
+                  </span>
+                </div>
+              </div>
+
+              {subtasks.length > 0 && (
+                <div className="task-info-item">
+                  <div className="task-info-icon">
+                    <div className="progress-indicator">
+                      <div 
+                        className="progress-circle" 
+                        style={{ 
+                          background: `conic-gradient(#78d957 ${calculateProgress() * 3.6}deg, rgba(51, 65, 85, 0.5) 0deg)` 
+                        }}
+                      >
+                        <span className="progress-text-small">{calculateProgress()}%</span>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="task-info-content">
+                    <span className="task-info-label">Progress</span>
+                    <span className="task-info-value">{calculateProgress()}% Complete</span>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {isOwner && (
+              <div className="task-info-actions">
+                <button
+                  className="task-info-btn"
+                  onClick={onInviteCollaborator}
+                >
+                  <HiUserPlus style={{ marginRight: "8px" }} />
+                  Invite Collaborators
+                </button>
+              </div>
+            )}
+          </section>
+        </div>
+      </div>
+
+      {/* Profile Modal */}
+      <ProfileModal
+        isOpen={profileModalOpen}
+        onClose={closeProfileModal}
+        profile={selectedProfile}
+      />
+
+      {/* Subtask Modal */}
+      <SubtaskModal
+        isOpen={subtaskModalOpen}
+        onClose={() => setSubtaskModalOpen(false)}
+        onSuccess={handleSubtasksCreated}
+        existingCollaborators={task.collaborators?.map(id => ({
+          id,
+          name: profileData[id]?.username || profileData[id]?.email || 'Unknown',
+          email: profileData[id]?.email || ''
+        })) || []}
+      />
+    </div>
+  );
+}
