@@ -4,6 +4,22 @@ import { auth, db } from "../lib/firebaseClient";
 import type { Priority, Task } from "../types/tasks";
 import { TaskDetailsModal } from "./TaskDetailsModal";
 import { InviteCollaboratorModal } from "./InviteCollaboratorModal";
+import {
+  addDoc,
+  collection,
+  deleteDoc,
+  doc,
+  getDoc,
+  getDocs,
+  onSnapshot,
+  orderBy,
+  query,
+  serverTimestamp,
+  updateDoc,
+  where,
+  writeBatch,
+  documentId,
+} from "firebase/firestore";
 
 // Suppress Firestore permission errors globally to prevent assertion failures
 const originalConsoleError = console.error;
@@ -32,20 +48,6 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import {
-  addDoc,
-  collection,
-  deleteDoc,
-  doc,
-  getDoc,
-  getDocs,
-  orderBy,
-  query,
-  serverTimestamp,
-  updateDoc,
-  where,
-  writeBatch,
-} from "firebase/firestore";
 import {
   enqueueOfflineAction,
   readCachedTasks,
@@ -223,6 +225,7 @@ export function TasksPage({ mode = "both" }: TasksPageProps) {
 
   useEffect(() => {
     let isMounted = true;
+    const unsubscribers: (() => void)[] = [];
 
     try {
       const cached = readCachedTasks<Task>();
@@ -234,34 +237,34 @@ export function TasksPage({ mode = "both" }: TasksPageProps) {
       // ignore cache errors
     }
 
-    async function load() {
+    async function setupRealtimeListeners() {
+      const user = auth.currentUser;
+      if (!user) {
+        if (!isMounted) return;
+        setTasks([]);
+        setAvailableCategories([]);
+        setLoading(false);
+        return;
+      }
+
+      if (!navigator.onLine) {
+        // Offline: rely on cached_tasks (set above). Keep UX responsive.
+        if (!isMounted) return;
+        setLoading(false);
+        return;
+      }
+
       setLoading(true);
       setError(null);
+
       try {
-        const user = auth.currentUser;
-        if (!user) {
-          if (!isMounted) return;
-          setTasks([]);
-          setAvailableCategories([]);
-          setLoading(false);
-          return;
-        }
-
-        if (!navigator.onLine) {
-          // Offline: rely on cached_tasks (set above). Keep UX responsive.
-          if (!isMounted) return;
-          setLoading(false);
-          return;
-        }
-
+        // Initial load
         const categoriesQuery = query(
           collection(db, "categories"),
           where("user_id", "==", user.uid),
           orderBy("created_at", "asc"),
         );
 
-        // Fetch tasks for the signed-in user (owner + collaborator).
-        // This merges both result sets and sorts by `order` ascending.
         const [fetchedTasks, categoriesSnapshot] = await Promise.all([
           fetchTasksForCurrentUser(),
           getDocs(categoriesQuery),
@@ -269,7 +272,7 @@ export function TasksPage({ mode = "both" }: TasksPageProps) {
 
         if (!isMounted) return;
 
-        // Mark owned tasks vs shared tasks for UI (e.g. read-only for collaborators).
+        // Process initial data
         const taskData: Task[] = fetchedTasks.map(({ id, data }) => {
           const ownerId =
             typeof data.user_id === "string" ? (data.user_id as string) : null;
@@ -283,85 +286,83 @@ export function TasksPage({ mode = "both" }: TasksPageProps) {
             ref: (data.ref as string | undefined) ?? id,
           };
         });
-        const categoryData = categoriesSnapshot.docs.map(
-          (d) => d.data() as { name?: string | null },
-        );
 
-        // Track the original `order` value so we only write back changes that
-        // actually need migration, rather than updating every task document.
-        const originalOrderById = new Map<string, number | null>();
-        for (const t of taskData as Task[]) {
-          originalOrderById.set(
-            t.id,
-            typeof t.order === "number" ? (t.order as number) : null,
-          );
-        }
-
-        const hasAnyMissingOrder = (
-          taskData as Array<Record<string, unknown>>
-        ).some((t) => typeof (t as Task).order !== "number");
-
-        const normalizedTasks = (taskData as Task[]).map((t) => ({
-          ...t,
-          order: typeof t.order === "number" ? t.order : 0,
-        }));
-        // console.log('Loaded tasks for', user.uid, taskData.map((t) => ({ id: t.id, title: t.title, shared: t.shared })))
-        const nextTasks = hasAnyMissingOrder
-          ? // First-time migration: preserve existing behavior (newest first) by assigning
-            // a sequential order based on created_at descending.
-            [...normalizedTasks]
-              .sort((a, b) => b.created_at.localeCompare(a.created_at))
-              .map((t, idx) => ({ ...t, order: idx + 1 }))
-          : normalizedTasks;
-
-        setTasks(nextTasks);
-        writeCachedTasks(nextTasks);
+        // Set initial data
+        setTasks(taskData);
         setAvailableCategories(
           Array.from(
             new Set(
-              (categoryData ?? [])
+              (categoriesSnapshot.docs ?? [])
+                .map((d) => d.data() as { name?: string | null })
                 .map((c) => ("name" in c ? String(c.name ?? "") : "").trim())
                 .filter((value) => value.length > 0),
             ),
           ).sort((a, b) => a.localeCompare(b)),
         );
 
-        // Persist `order` only for tasks that either:
-        // - previously had no numeric `order`, or
-        // - now have a different `order` value than before.
-        // This dramatically reduces the number of writes and helps avoid
-        // exhausting Firestore write quotas on large task lists.
-        if (hasAnyMissingOrder) {
-          const tasksNeedingOrderUpdate = nextTasks.filter((task) => {
-            const original = originalOrderById.get(task.id);
-            if (typeof original !== "number") return true;
-            return original !== task.order;
+        // Set up real-time listeners for all tasks
+        const taskIds = taskData.map((task) => task.id);
+        if (taskIds.length > 0) {
+          const tasksQuery = query(
+            collection(db, "tasks"),
+            where(documentId(), "in", taskIds)
+          );
+
+          const unsubscribeTasks = onSnapshot(tasksQuery, (snapshot) => {
+            if (!isMounted) return;
+
+            const updatedTasks: Task[] = [];
+            snapshot.forEach((doc) => {
+              const data = doc.data();
+              const ownerId = typeof data.user_id === "string" ? data.user_id : null;
+              const isInvited = data.isInvited === true;
+
+              updatedTasks.push({
+                id: doc.id,
+                ...(data as Omit<Task, "id">),
+                shared: ownerId !== user.uid,
+                ownerId: ownerId,
+                isInvited,
+                ref: (data.ref as string | undefined) ?? doc.id,
+              });
+            });
+
+            // Sort by order
+            updatedTasks.sort((a, b) => {
+              if (a.completed !== b.completed) {
+                return a.completed ? 1 : -1;
+              }
+              return (a.order ?? 0) - (b.order ?? 0);
+            });
+
+            setTasks(updatedTasks);
+          }, (error) => {
+            console.error("Error listening to task updates:", error);
           });
 
-          if (tasksNeedingOrderUpdate.length > 0) {
-            try {
-              const batch = writeBatch(db);
-              for (const task of tasksNeedingOrderUpdate) {
-                const ref = doc(collection(db, "tasks"), task.id);
-                batch.update(ref, { order: task.order });
-              }
-              await batch.commit();
-            } catch (err) {
-              const code = (err as { code?: unknown } | null)?.code;
-              if (code === "resource-exhausted") {
-                console.warn(
-                  //   '[TasksPage] Skipped order migration writes due to Firestore resource-exhausted quota.',
-                  err,
-                );
-              } else {
-                console.warn(
-                  // '[TasksPage] Failed to persist order migration to Firestore.',
-                  err,
-                );
-              }
-            }
-          }
+          unsubscribers.push(unsubscribeTasks);
         }
+
+        // Set up real-time listener for categories
+        const unsubscribeCategories = onSnapshot(categoriesQuery, (snapshot) => {
+          if (!isMounted) return;
+
+          const categoryData = snapshot.docs.map(
+            (d) => d.data() as { name?: string | null },
+          );
+
+          setAvailableCategories(
+            Array.from(
+              new Set(
+                (categoryData ?? [])
+                  .map((c) => ("name" in c ? String(c.name ?? "") : "").trim())
+                  .filter((value) => value.length > 0),
+              ),
+            ).sort((a, b) => a.localeCompare(b)),
+          );
+        });
+
+        unsubscribers.push(unsubscribeCategories);
       } catch (err) {
         const message =
           err instanceof Error ? err.message : "Could not load tasks.";
@@ -372,10 +373,11 @@ export function TasksPage({ mode = "both" }: TasksPageProps) {
       }
     }
 
-    void load();
+    setupRealtimeListeners();
 
     return () => {
       isMounted = false;
+      unsubscribers.forEach((unsubscribe) => unsubscribe());
     };
   }, []);
 
@@ -1083,11 +1085,27 @@ export function TasksPage({ mode = "both" }: TasksPageProps) {
                           return due < today;
                         })();
 
-                      const statusLabel = task.completed
-                        ? "Completed"
-                        : isOverdue
-                          ? "Overdue"
-                          : "Pending";
+                      // Calculate subtask progress for better status determination
+                      const subtasks = task.subtasks || [];
+                      const completedSubtasks = subtasks.filter(st => st.completed).length;
+                      const totalSubtasks = subtasks.length;
+                      const hasActiveProgress = totalSubtasks > 0 && completedSubtasks > 0;
+                      const progressPercentage = totalSubtasks > 0 ? (completedSubtasks / totalSubtasks) * 100 : 0;
+
+                      // Enhanced status calculation based on task completion, subtask progress, and due date
+                      let statusLabel = "Pending";
+                      
+                      if (task.completed) {
+                        statusLabel = "Completed";
+                      } else if (isOverdue) {
+                        statusLabel = "Overdue";
+                      } else if (hasActiveProgress) {
+                        statusLabel = "In Progress";
+                      } else if (totalSubtasks > 0) {
+                        statusLabel = "Not Started";
+                      } else {
+                        statusLabel = "Pending";
+                      }
 
                       return (
                         <tr
@@ -1170,11 +1188,27 @@ export function TasksPage({ mode = "both" }: TasksPageProps) {
                           return due < today;
                         })();
 
-                      const statusLabel = task.completed
-                        ? "Completed"
-                        : isOverdue
-                          ? "Overdue"
-                          : "Pending";
+                      // Calculate subtask progress for better status determination
+                      const subtasks = task.subtasks || [];
+                      const completedSubtasks = subtasks.filter(st => st.completed).length;
+                      const totalSubtasks = subtasks.length;
+                      const hasActiveProgress = totalSubtasks > 0 && completedSubtasks > 0;
+                      const progressPercentage = totalSubtasks > 0 ? (completedSubtasks / totalSubtasks) * 100 : 0;
+
+                      // Enhanced status calculation based on task completion, subtask progress, and due date
+                      let statusLabel = "Pending";
+                      
+                      if (task.completed) {
+                        statusLabel = "Completed";
+                      } else if (isOverdue) {
+                        statusLabel = "Overdue";
+                      } else if (hasActiveProgress) {
+                        statusLabel = "In Progress";
+                      } else if (totalSubtasks > 0) {
+                        statusLabel = "Not Started";
+                      } else {
+                        statusLabel = "Pending";
+                      }
 
                       return (
                         <SortableTaskItem

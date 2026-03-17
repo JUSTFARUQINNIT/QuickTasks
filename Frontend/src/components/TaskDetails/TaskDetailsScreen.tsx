@@ -32,6 +32,7 @@ import {
   getDoc,
   addDoc,
   collection,
+  onSnapshot,
 } from "firebase/firestore";
 import {
   getStorage as getFirebaseStorage,
@@ -86,12 +87,28 @@ export function TaskDetailsScreen({
   const [profileModalOpen, setProfileModalOpen] = useState(false);
   const [profileData, setProfileData] = useState<{ [key: string]: any }>({});
   const [subtaskModalOpen, setSubtaskModalOpen] = useState(false);
+  const [currentTask, setCurrentTask] = useState<Task>(task);
+
+  // Real-time task listener
+  useEffect(() => {
+    const taskRef = doc(db, "tasks", task.id);
+    const unsubscribe = onSnapshot(taskRef, (docSnapshot) => {
+      if (docSnapshot.exists()) {
+        const updatedTask = docSnapshot.data() as Task;
+        setCurrentTask(updatedTask);
+      }
+    }, (error) => {
+      console.error("Error listening to task updates:", error);
+    });
+
+    return () => unsubscribe();
+  }, [task.id]);
 
   // Use real subtasks from database or empty array
-  const subtasks = task.subtasks || [];
+  const subtasks = currentTask.subtasks || [];
 
   // Use real attachments from database or empty array
-  const attachments = task.attachments || [];
+  const attachments = currentTask.attachments || [];
 
   // Load profile data for collaborators and owner
   useEffect(() => {
@@ -100,13 +117,13 @@ export function TaskDetailsScreen({
       const userIds = new Set<string>();
 
       // Add owner ID
-      if (task.ownerId) {
-        userIds.add(task.ownerId);
+      if (currentTask.ownerId) {
+        userIds.add(currentTask.ownerId);
       }
 
       // Add collaborator IDs
-      if (task.collaborators) {
-        task.collaborators.forEach((id) => userIds.add(id));
+      if (currentTask.collaborators) {
+        currentTask.collaborators.forEach((id) => userIds.add(id));
       }
 
       // Load profiles for all users
@@ -139,7 +156,7 @@ export function TaskDetailsScreen({
     };
 
     loadProfileData();
-  }, [task.ownerId, task.collaborators]);
+  }, [currentTask.ownerId, currentTask.collaborators]);
 
   const toggleSubtask = async (subtaskId: string) => {
     const subtask = subtasks.find(st => st.id === subtaskId);
@@ -157,38 +174,33 @@ export function TaskDetailsScreen({
     }
 
     try {
-      const taskRef = doc(db, "tasks", task.id);
       const isCompleting = !subtask.completed;
-      const updatedSubtasks = subtasks.map(st => {
-        if (st.id === subtaskId) {
-          return {
-            ...st,
-            completed: isCompleting,
-            completed_by: isCompleting ? currentUser.uid : null,
-            completed_at: isCompleting ? new Date().toISOString() : null
-          };
-        }
-        return st;
-      });
-
-      // Calculate progress
-      const completedCount = updatedSubtasks.filter(st => st.completed).length;
-      const totalCount = updatedSubtasks.length;
-      const progress = totalCount > 0 ? (completedCount / totalCount) * 100 : 0;
-
-      // Update task with new subtasks and potentially new completion status
-      const updateData: any = { subtasks: updatedSubtasks };
       
-      // Auto-mark task as completed when 100% progress
-      if (progress === 100 && !task.completed) {
-        updateData.completed = true;
-        updateData.completed_at = new Date().toISOString();
-      } else if (progress < 100 && task.completed) {
-        updateData.completed = false;
-        updateData.completed_at = null;
+      // Use backend API for subtask updates to handle permissions properly
+      const token = await auth.currentUser?.getIdToken();
+      if (!token) {
+        throw new Error("Authentication required");
       }
 
-      await updateDoc(taskRef, updateData);
+      const response = await fetch(`http://localhost:8787/api/tasks/${task.id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          type: 'subtask',
+          data: {
+            id: subtaskId,
+            completed: isCompleting
+          }
+        })
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to update subtask');
+      }
 
       // Create notification for completed subtask
       if (isCompleting) {
@@ -229,12 +241,12 @@ export function TaskDetailsScreen({
         try {
           await addDoc(collection(db, "notifications"), {
             userId: subtask.assigned_to,
-            taskId: task.id,
-            taskTitle: task.title,
+            taskId: currentTask.id,
+            taskTitle: currentTask.title,
             subtaskId: subtask.id,
             subtaskText: subtask.text,
             type: "subtask_assigned",
-            message: `You have been assigned a new subtask: "${subtask.text}" in task "${task.title}"`,
+            message: `You have been assigned a new subtask: "${subtask.text}" in task "${currentTask.title}"`,
             isRead: false,
             createdAt: new Date().toISOString(),
             createdBy: currentUser.uid
@@ -249,16 +261,16 @@ export function TaskDetailsScreen({
   const createSubtaskCompletionNotification = async (subtask: any, currentUser: any) => {
     try {
       // Notify task owner about subtask completion
-      if (task.ownerId && task.ownerId !== currentUser.uid) {
+      if (currentTask.ownerId && currentTask.ownerId !== currentUser.uid) {
         await addDoc(collection(db, "notifications"), {
-          userId: task.ownerId,
-          taskId: task.id,
-          taskTitle: task.title,
+          userId: currentTask.ownerId,
+          taskId: currentTask.id,
+          taskTitle: currentTask.title,
           subtaskId: subtask.id,
           subtaskText: subtask.text,
           completedBy: currentUser.uid,
           type: "subtask_completed",
-          message: `Subtask "${subtask.text}" has been completed`,
+          message: `Subtask "${subtask.text}" has been completed by ${currentUser.email || currentUser.uid}`,
           isRead: false,
           createdAt: new Date().toISOString(),
           createdBy: currentUser.uid
@@ -317,7 +329,7 @@ export function TaskDetailsScreen({
 
     const file = files[0];
     // Allow all task participants (owner and collaborators) to upload files
-    if (!isOwner && !task.collaborators?.includes(auth.currentUser?.uid || "")) {
+    if (!isOwner && !currentTask.collaborators?.includes(auth.currentUser?.uid || "")) {
       alert("Only task participants can upload files.");
       return;
     }
@@ -328,7 +340,7 @@ export function TaskDetailsScreen({
       const storage = getFirebaseStorage();
       const fileRef = storageRef(
         storage,
-        `tasks/${task.id}/${Date.now()}_${file.name}`,
+        `tasks/${currentTask.id}/${Date.now()}_${file.name}`,
       );
 
       // Upload file to Firebase Storage
@@ -347,7 +359,7 @@ export function TaskDetailsScreen({
       };
 
       // Update task document with new attachment
-      const taskRef = doc(db, "tasks", task.id);
+      const taskRef = doc(db, "tasks", currentTask.id);
       await updateDoc(taskRef, {
         attachments: arrayUnion(attachment),
       });
@@ -385,7 +397,7 @@ export function TaskDetailsScreen({
     if (!confirm("Are you sure you want to delete this file?")) return;
 
     try {
-      const taskRef = doc(db, "tasks", task.id);
+      const taskRef = doc(db, "tasks", currentTask.id);
       const updatedAttachments = attachments.filter(att => att.id !== attachmentId);
       await updateDoc(taskRef, { attachments: updatedAttachments });
     } catch (error) {
@@ -402,7 +414,7 @@ export function TaskDetailsScreen({
 
     try {
       const storage = getFirebaseStorage();
-      const fileRef = storageRef(storage, `tasks/${task.id}/${Date.now()}_${newFile.name}`);
+      const fileRef = storageRef(storage, `tasks/${currentTask.id}/${Date.now()}_${newFile.name}`);
       
       // Upload new file
       await uploadBytes(fileRef, newFile);
@@ -420,7 +432,7 @@ export function TaskDetailsScreen({
       };
 
       // Update task document
-      const taskRef = doc(db, "tasks", task.id);
+      const taskRef = doc(db, "tasks", currentTask.id);
       const updatedAttachments = attachments.map(att => 
         att.id === attachmentId ? updatedAttachment : att
       );
@@ -492,8 +504,8 @@ export function TaskDetailsScreen({
     if (!auth.currentUser) return;
 
     try {
-      const taskRef = doc(db, "tasks", task.id);
-      const isCompleting = !task.completed;
+      const taskRef = doc(db, "tasks", currentTask.id);
+      const isCompleting = !currentTask.completed;
       
       const updateData: any = {
         completed: isCompleting,
@@ -504,14 +516,14 @@ export function TaskDetailsScreen({
       await updateDoc(taskRef, updateData);
 
       // Create notification for task completion
-      if (isCompleting && task.ownerId && task.ownerId !== auth.currentUser.uid) {
+      if (isCompleting && currentTask.ownerId && currentTask.ownerId !== auth.currentUser.uid) {
         await addDoc(collection(db, "notifications"), {
-          userId: task.ownerId,
-          taskId: task.id,
-          taskTitle: task.title,
+          userId: currentTask.ownerId,
+          taskId: currentTask.id,
+          taskTitle: currentTask.title,
           completedBy: auth.currentUser.uid,
           type: "task_completed",
-          message: `Task "${task.title}" has been completed`,
+          message: `Task "${currentTask.title}" has been completed`,
           isRead: false,
           createdAt: new Date().toISOString(),
           createdBy: auth.currentUser.uid
@@ -612,17 +624,7 @@ export function TaskDetailsScreen({
               <span className={`task-status ${getStatusClass()}`}>
                 {getStatusText()}
               </span>
-              {canCompleteTask() && (
-                <button
-                  className="task-complete-btn"
-                  onClick={toggleTaskComplete}
-                  title={task.completed ? "Mark as incomplete" : "Mark as complete"}
-                >
-                  <HiCheckCircle />
-                  {task.completed ? "Incomplete" : "Complete"}
-                </button>
-              )}
-            </div>
+              </div>
           </section>
 
           {/* Team Members Section */}

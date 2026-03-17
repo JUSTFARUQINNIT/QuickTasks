@@ -29,6 +29,7 @@ export function SubtaskModal({
   const [newSubtaskText, setNewSubtaskText] = useState("");
   const [selectedRole, setSelectedRole] = useState("collaborator");
   const [selectedDueDate, setSelectedDueDate] = useState("");
+  const [selectedCollaborator, setSelectedCollaborator] = useState("");
   const [loading, setLoading] = useState(false);
 
   const addSubtask = () => {
@@ -49,13 +50,14 @@ export function SubtaskModal({
       id: Date.now().toString(),
       text: newSubtaskText.trim(),
       role: selectedRole,
-      assignedTo: subtasks[subtasks.length - 1]?.assignedTo || undefined, // Keep existing assignment or undefined
+      assignedTo: selectedCollaborator || undefined,
       dueDate: selectedDueDate || undefined
     };
 
     setSubtasks([...subtasks, newSubtask]);
     setNewSubtaskText("");
     setSelectedDueDate("");
+    setSelectedCollaborator("");
   };
 
   const removeSubtask = (id: string) => {
@@ -106,6 +108,7 @@ export function SubtaskModal({
     setNewSubtaskText("");
     setSelectedRole("collaborator");
     setSelectedDueDate("");
+    setSelectedCollaborator("");
   };
 
   const getCollaboratorName = (id: string) => {
@@ -177,12 +180,8 @@ export function SubtaskModal({
                     <label htmlFor="assignTo">Assign To</label>
                     <select
                       id="assignTo"
-                      value={subtasks[subtasks.length - 1]?.assignedTo || ""}
-                      onChange={(e) => {
-                        if (subtasks.length > 0) {
-                          updateSubtaskAssignment(subtasks[subtasks.length - 1].id, e.target.value);
-                        }
-                      }}
+                      value={selectedCollaborator}
+                      onChange={(e) => setSelectedCollaborator(e.target.value)}
                     >
                       <option value="">Select collaborator...</option>
                       {existingCollaborators.map((collaborator) => (

@@ -30,10 +30,10 @@ export default async function taskManagerRoutes(req, res) {
 
   try {
     // Get the task to verify ownership
-    const taskRef = doc(adminDb, "tasks", taskId);
-    const taskSnap = await getDoc(taskRef);
+    const taskRef = db.collection("tasks").doc(taskId);
+    const taskSnap = await taskRef.get();
     
-    if (!taskSnap.exists()) {
+    if (!taskSnap.exists) {
       return res.status(404).json({ error: "Task not found" });
     }
 
@@ -50,11 +50,11 @@ export default async function taskManagerRoutes(req, res) {
     // Handle different HTTP methods
     switch (req.method) {
       case "POST":
-        return await handlePostRequest(req, res, taskRef, taskData, isOwner);
+        return await handlePostRequest(req, res, taskRef, taskData, isOwner, userId);
       case "PUT":
-        return await handlePutRequest(req, res, taskRef, taskData, isOwner);
+        return await handlePutRequest(req, res, taskRef, taskData, isOwner, userId);
       case "DELETE":
-        return await handleDeleteRequest(req, res, taskRef, taskData, isOwner);
+        return await handleDeleteRequest(req, res, taskRef, taskData, isOwner, userId);
       default:
         return res.status(405).json({ error: "Method not allowed" });
     }
@@ -64,7 +64,7 @@ export default async function taskManagerRoutes(req, res) {
   }
 }
 
-async function handlePostRequest(req, res, taskRef, taskData, isOwner) {
+async function handlePostRequest(req, res, taskRef, taskData, isOwner, userId) {
   const { type, data } = req.body;
 
   switch (type) {
@@ -80,7 +80,7 @@ async function handlePostRequest(req, res, taskRef, taskData, isOwner) {
         created_at: new Date().toISOString()
       };
       
-      await updateDoc(taskRef, {
+      await taskRef.update({
         subtasks: FieldValue.arrayUnion(newSubtask)
       });
       
@@ -101,7 +101,7 @@ async function handlePostRequest(req, res, taskRef, taskData, isOwner) {
         uploaded_at: new Date().toISOString()
       };
       
-      await updateDoc(taskRef, {
+      await taskRef.update({
         attachments: FieldValue.arrayUnion(newAttachment)
       });
       
@@ -112,20 +112,47 @@ async function handlePostRequest(req, res, taskRef, taskData, isOwner) {
   }
 }
 
-async function handlePutRequest(req, res, taskRef, taskData, isOwner) {
+async function handlePutRequest(req, res, taskRef, taskData, isOwner, userId) {
   const { type, data } = req.body;
 
   switch (type) {
     case "subtask":
-      if (!isOwner) {
-        return res.status(403).json({ error: "Only owners can update subtasks" });
+      // Check if user is owner or the assigned subtask owner
+      const targetSubtask = (taskData.subtasks || []).find(subtask => subtask.id === data.id);
+      const isSubtaskOwner = targetSubtask?.assigned_to === userId && targetSubtask?.role === "owner";
+      
+      if (!isOwner && !isSubtaskOwner) {
+        return res.status(403).json({ error: "Only task owners or assigned subtask owners can update subtasks" });
       }
       
       const updatedSubtasks = (taskData.subtasks || []).map(subtask =>
-        subtask.id === data.id ? { ...subtask, completed: data.completed } : subtask
+        subtask.id === data.id ? { 
+          ...subtask, 
+          completed: data.completed,
+          completed_by: data.completed ? userId : null,
+          completed_at: data.completed ? new Date().toISOString() : null
+        } : subtask
       );
       
-      await updateDoc(taskRef, { subtasks: updatedSubtasks });
+      // Calculate progress and auto-complete task if 100%
+      const completedCount = updatedSubtasks.filter(st => st.completed).length;
+      const totalCount = updatedSubtasks.length;
+      const progress = totalCount > 0 ? (completedCount / totalCount) * 100 : 0;
+      
+      const updateData = { subtasks: updatedSubtasks };
+      
+      // Auto-mark task as completed when 100% progress
+      if (progress === 100 && !taskData.completed) {
+        updateData.completed = true;
+        updateData.completed_at = new Date().toISOString();
+        updateData.completed_by = userId;
+      } else if (progress < 100 && taskData.completed) {
+        updateData.completed = false;
+        updateData.completed_at = null;
+        updateData.completed_by = null;
+      }
+      
+      await taskRef.update(updateData);
       
       return res.json({ success: true });
 
@@ -134,7 +161,7 @@ async function handlePutRequest(req, res, taskRef, taskData, isOwner) {
   }
 }
 
-async function handleDeleteRequest(req, res, taskRef, taskData, isOwner) {
+async function handleDeleteRequest(req, res, taskRef, taskData, isOwner, userId) {
   const { type, id } = req.query;
 
   switch (type) {
@@ -144,7 +171,7 @@ async function handleDeleteRequest(req, res, taskRef, taskData, isOwner) {
       }
       
       const updatedSubtasks = (taskData.subtasks || []).filter(subtask => subtask.id !== id);
-      await updateDoc(taskRef, { subtasks: updatedSubtasks });
+      await taskRef.update({ subtasks: updatedSubtasks });
       
       return res.json({ success: true });
 
@@ -154,7 +181,7 @@ async function handleDeleteRequest(req, res, taskRef, taskData, isOwner) {
       }
       
       const updatedAttachments = (taskData.attachments || []).filter(attachment => attachment.id !== id);
-      await updateDoc(taskRef, { attachments: updatedAttachments });
+      await taskRef.update({ attachments: updatedAttachments });
       
       return res.json({ success: true });
 
