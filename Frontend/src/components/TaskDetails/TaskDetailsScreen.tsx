@@ -1,8 +1,24 @@
+import { auth, db, storage } from "../../lib/firebaseClient";
 import type { Task } from "../../types/tasks";
 import { TaskHeader } from "./TaskHeader";
 import { ProfileModal } from "./ProfileModal";
 import { SubtaskModal } from "../SubtaskModal";
 import { useState, useRef, useEffect } from "react";
+import {
+  doc,
+  updateDoc,
+  deleteDoc,
+  arrayUnion,
+  getDoc,
+  addDoc,
+  collection,
+  onSnapshot,
+} from "firebase/firestore";
+import {
+  ref as storageRef,
+  uploadBytes,
+  getDownloadURL,
+} from "firebase/storage";
 import {
   HiPlus,
   HiCheck,
@@ -24,24 +40,8 @@ import {
   HiArrowDownTray,
   HiTrash,
   HiPencil,
+  HiXMark,
 } from "react-icons/hi2";
-import { auth, db } from "../../lib/firebaseClient";
-import {
-  doc,
-  updateDoc,
-  arrayUnion,
-  getDoc,
-  addDoc,
-  collection,
-  onSnapshot,
-  deleteDoc,
-} from "firebase/firestore";
-import {
-  getStorage as getFirebaseStorage,
-  ref as storageRef,
-  uploadBytes,
-  getDownloadURL,
-} from "firebase/storage";
 
 type TaskDetailsScreenProps = {
   task: Task;
@@ -413,7 +413,6 @@ export function TaskDetailsScreen({
     setUploading(true);
 
     try {
-      const storage = getFirebaseStorage();
       const fileRef = storageRef(
         storage,
         `tasks/${currentTask.id}/${Date.now()}_${file.name}`,
@@ -491,7 +490,6 @@ export function TaskDetailsScreen({
     }
 
     try {
-      const storage = getFirebaseStorage();
       const fileRef = storageRef(
         storage,
         `tasks/${currentTask.id}/${Date.now()}_${newFile.name}`,
@@ -1098,14 +1096,11 @@ export function TaskDetailsScreen({
               </div>
             )}
 
-             {isOwner && (
+            {isOwner && (
               <div className="task-info-actions">
-                <button
-                  className="task-info-btn"
-                  onClick={handleDeleteTask}
-                >
+                <button className="task-info-btn" onClick={handleDeleteTask}>
                   <HiTrash style={{ marginRight: "8px" }} />
-                 Delete Task
+                  Delete Task
                 </button>
               </div>
             )}
@@ -1124,20 +1119,21 @@ export function TaskDetailsScreen({
       {showDeleteModal && (
         <div className="modal-overlay">
           <div className="modal-content delete-modal">
-            <div className="delete-modal-icon">
-              <HiTrash className="trash-animation" />
+            <div className="delete-modal-header">
+              <h3>Delete Task</h3>
             </div>
-            <h3>Delete Task</h3>
             <p>
               Are you sure you want to delete this task? This action cannot be
               undone.
             </p>
             <div className="modal-actions">
               <button className="btn btn-cancel" onClick={cancelDeleteTask}>
-                Cancel
+                <HiXMark className="cancel-animation" />
+                <span>Cancel</span>
               </button>
               <button className="btn btn-danger" onClick={confirmDeleteTask}>
-                Delete Task
+                <HiTrash className="trash-animation" />
+                <span>Delete Task</span>
               </button>
             </div>
           </div>
