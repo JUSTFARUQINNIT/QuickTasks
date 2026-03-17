@@ -102,7 +102,7 @@ export function TaskCommentsPage() {
     if (!trimmed || !taskId) return;
     const user = auth.currentUser;
     if (!user) {
-      alert("You must be signed in to comment.");
+      console.error("You must be signed in to comment.");
       return;
     }
     setCommentSaving(true);
@@ -131,7 +131,7 @@ export function TaskCommentsPage() {
     } catch (err) {
       const msg =
         err instanceof Error ? err.message : "Could not add comment.";
-      alert(msg);
+      console.error(msg);
     } finally {
       setCommentSaving(false);
     }
@@ -148,7 +148,6 @@ export function TaskCommentsPage() {
           >
             ←
           </button>
-            {/* <h2 className="tasks-heading">Comments</h2> */}
           <div>
             <p className="task-subtitle">
               Discussion for <span className="highlight">{taskTitle}</span>

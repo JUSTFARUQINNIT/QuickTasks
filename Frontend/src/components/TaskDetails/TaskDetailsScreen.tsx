@@ -51,7 +51,7 @@ type TaskDetailsScreenProps = {
   collaboratorLabels: string[] | null;
   onBack: () => void;
   onEdit: () => void;
-  onDelete: () => void;
+  onDelete?: () => void;
   onInviteCollaborator: () => void;
   onOpenComments: () => void;
 };
@@ -144,8 +144,7 @@ export function TaskDetailsScreen({
         subtasks: updatedSubtasks,
       });
 
-      // Update local state
-      setSubtasks(updatedSubtasks);
+      // Update local state - subtasks will update automatically via real-time listener
       showSuccessNotification("Subtask deleted successfully!");
     } catch (error) {
       console.error("Error deleting subtask:", error);
@@ -629,7 +628,7 @@ export function TaskDetailsScreen({
         isOwner={isOwner}
         onBack={onBack}
         onEdit={onEdit}
-        onDelete={handleDeleteTask}
+        onDelete={onDelete}
       />
 
       <div className="task-details-layout">
@@ -1095,6 +1094,18 @@ export function TaskDetailsScreen({
                 >
                   <HiUserPlus style={{ marginRight: "8px" }} />
                   Invite Collaborators
+                </button>
+              </div>
+            )}
+
+             {isOwner && (
+              <div className="task-info-actions">
+                <button
+                  className="task-info-btn"
+                  onClick={handleDeleteTask}
+                >
+                  <HiTrash style={{ marginRight: "8px" }} />
+                 Delete Task
                 </button>
               </div>
             )}

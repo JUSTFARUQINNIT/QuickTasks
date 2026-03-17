@@ -191,7 +191,8 @@ export function CreateTaskModal({
       resetForm();
     } catch (error) {
       console.error("Error creating task:", error);
-      alert("Failed to create task. Please try again.");
+      // Replace alert with proper error handling
+      console.error("Failed to create task. Please try again.");
     } finally {
       setLoading(false);
     }

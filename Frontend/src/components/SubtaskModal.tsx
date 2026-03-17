@@ -46,9 +46,7 @@ export function SubtaskModal({
       const taskDate = new Date(taskDueDate);
 
       if (subtaskDate > taskDate) {
-        alert(
-          `Subtask due date cannot be after the task due date (${new Date(taskDueDate).toLocaleDateString()})`,
-        );
+        console.error(`Subtask due date cannot be after the task due date (${new Date(taskDueDate).toLocaleDateString()})`);
         return;
       }
     }
@@ -75,7 +73,7 @@ export function SubtaskModal({
     e.preventDefault();
 
     if (subtasks.length === 0) {
-      alert("Please add at least one subtask.");
+      console.error("Please add at least one subtask.");
       return;
     }
 
@@ -98,7 +96,7 @@ export function SubtaskModal({
       resetForm();
     } catch (error) {
       console.error("Error creating subtasks:", error);
-      alert("Failed to create subtasks. Please try again.");
+      console.error("Failed to create subtasks. Please try again.");
     } finally {
       setLoading(false);
     }

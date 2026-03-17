@@ -1068,8 +1068,7 @@ export function TasksPage({ mode = "both" }: TasksPageProps) {
                       const totalSubtasks = subtasks.length;
                       const hasActiveProgress =
                         totalSubtasks > 0 && completedSubtasks > 0;
-                      // const progressPercentage = totalSubtasks > 0 ? (completedSubtasks / totalSubtasks) * 100 : 0;
-
+                      
                       // Enhanced status calculation based on task completion, subtask progress, and due date
                       let statusLabel = "Pending";
 
@@ -1174,8 +1173,7 @@ export function TasksPage({ mode = "both" }: TasksPageProps) {
                       const totalSubtasks = subtasks.length;
                       const hasActiveProgress =
                         totalSubtasks > 0 && completedSubtasks > 0;
-                      // const progressPercentage = totalSubtasks > 0 ? (completedSubtasks / totalSubtasks) * 100 : 0;
-
+                      
                       // Enhanced status calculation based on task completion, subtask progress, and due date
                       let statusLabel = "Pending";
 
