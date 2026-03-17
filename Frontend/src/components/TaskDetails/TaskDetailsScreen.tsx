@@ -464,8 +464,12 @@ export function TaskDetailsScreen({
     // Owner can complete any subtask
     if (isOwner) return true;
     
-    // Collaborators can ONLY complete subtasks explicitly assigned to them
-    // Unassigned subtasks cannot be completed by non-owners
+    // If subtask has an "owner" role, only that assigned owner can complete it
+    if (subtask.role === "owner") {
+      return subtask.assigned_to === currentUser.uid;
+    }
+    
+    // For regular subtasks without owner role, assigned collaborators can complete
     return subtask.assigned_to === currentUser.uid;
   };
 
@@ -1041,9 +1045,9 @@ export function TaskDetailsScreen({
         onSuccess={handleSubtasksCreated}
         existingCollaborators={task.collaborators?.map(id => ({
           id,
-          name: profileData[id]?.username || profileData[id]?.email || 'Unknown',
+          name: profileData[id]?.username || profileData[id]?.email || collaboratorLabels?.find(label => label === id) || 'Unknown',
           email: profileData[id]?.email || '',
-          role: profileData[id]?.role || 'collaborator'
+          role: 'collaborator'
         })) || []}
         taskDueDate={task.due_date}
       />

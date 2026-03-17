@@ -109,41 +109,7 @@ export function TasksPage({ mode = "both" }: TasksPageProps) {
       getDocs(invitedTasksQuery),
     ]);
 
-    let collaboratorDocs: Array<{
-      id: string;
-      data: () => Record<string, unknown>;
-    }> = [];
-    try {
-      const collaboratorSnapOrdered = await getDocs(collaboratorQueryOrdered);
-      collaboratorDocs = collaboratorSnapOrdered.docs as Array<{
-        id: string;
-        data: () => Record<string, unknown>;
-      }>;
-    } catch (err) {
-      const code = (err as { code?: unknown } | null)?.code;
-      if (code === "permission-denied") {
-        console.error(
-          "Collaborator query denied by Firestore rules. This usually means your published rules are not applied to the project your app is using, or the tasks are not actually storing collaborator UIDs in `collaborators`.",
-          err,
-        );
-      } else {
-        console.error("Error fetching collaborator tasks:", err);
-      }
-      // Fallback to query without orderBy
-      try {
-        const collaboratorSnapNoOrderBy = await getDocs(
-          collaboratorQueryTempNoOrderBy,
-        );
-        collaboratorDocs = collaboratorSnapNoOrderBy.docs as Array<{
-          id: string;
-          data: () => Record<string, unknown>;
-        }>;
-      } catch (fallbackErr) {
-        console.error("Fallback collaborator query also failed:", fallbackErr);
-      }
-    }
-
-    // Process invited tasks and ensure they have complete data
+    // Process invited tasks (new model) - this replaces the legacy collaborator query
     const invitedTasks = await Promise.all(
       invitedSnap.docs.map(async (invitedDoc) => {
         const invitedData = invitedDoc.data();
@@ -171,7 +137,7 @@ export function TasksPage({ mode = "both" }: TasksPageProps) {
                 // Keep invited-specific fields
                 invitedAt: invitedData.invitedAt,
                 invitedBy: invitedData.invitedBy,
-              },
+              }
             };
           }
         } catch (err) {
@@ -191,15 +157,14 @@ export function TasksPage({ mode = "both" }: TasksPageProps) {
             collaborators: invitedData.collaborators || [],
             shared: invitedData.shared || false,
             completed: invitedData.completed || false,
-          },
+          }
         };
-      }),
+      })
     );
 
     // Combine all task data
     const allTasks = [
       ...ownerSnap.docs.map((doc) => ({ id: doc.id, data: doc.data() })),
-      ...collaboratorDocs.map((doc) => ({ id: doc.id, data: doc.data() })),
       ...invitedTasks,
     ];
 

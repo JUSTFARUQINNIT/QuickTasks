@@ -3,7 +3,7 @@ import { HiXMark, HiPlus, HiUser, HiTrash } from "react-icons/hi2";
 import { auth, db } from "../lib/firebaseClient";
 import { 
   collection, 
-  doc, 
+  // doc, 
   addDoc, 
   serverTimestamp,
   query, 

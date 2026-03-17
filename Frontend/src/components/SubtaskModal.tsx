@@ -49,6 +49,7 @@ export function SubtaskModal({
       id: Date.now().toString(),
       text: newSubtaskText.trim(),
       role: selectedRole,
+      assignedTo: subtasks[subtasks.length - 1]?.assignedTo || undefined, // Keep existing assignment or undefined
       dueDate: selectedDueDate || undefined
     };
 

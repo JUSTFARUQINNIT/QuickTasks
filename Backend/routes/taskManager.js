@@ -1,6 +1,8 @@
-import { doc, updateDoc, arrayUnion, getDoc, serverTimestamp } from "firebase-admin/firestore";
+import { getFirestore, FieldValue } from "firebase-admin/firestore";
 import { getAuth } from "firebase-admin/auth";
-import { db } from "../utils/firebase.js";
+import { adminDb } from "../utils/firebase.js";
+
+const db = getFirestore();
 
 export default async function taskManagerRoutes(req, res) {
   const { taskId } = req.params;
@@ -28,7 +30,7 @@ export default async function taskManagerRoutes(req, res) {
 
   try {
     // Get the task to verify ownership
-    const taskRef = doc(db, "tasks", taskId);
+    const taskRef = doc(adminDb, "tasks", taskId);
     const taskSnap = await getDoc(taskRef);
     
     if (!taskSnap.exists()) {
@@ -79,7 +81,7 @@ async function handlePostRequest(req, res, taskRef, taskData, isOwner) {
       };
       
       await updateDoc(taskRef, {
-        subtasks: arrayUnion(newSubtask)
+        subtasks: FieldValue.arrayUnion(newSubtask)
       });
       
       return res.json({ success: true, subtask: newSubtask });
@@ -100,7 +102,7 @@ async function handlePostRequest(req, res, taskRef, taskData, isOwner) {
       };
       
       await updateDoc(taskRef, {
-        attachments: arrayUnion(newAttachment)
+        attachments: FieldValue.arrayUnion(newAttachment)
       });
       
       return res.json({ success: true, attachment: newAttachment });
