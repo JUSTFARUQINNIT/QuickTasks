@@ -6,35 +6,55 @@ type SubtaskModalProps = {
   isOpen: boolean;
   onClose: () => void;
   onSuccess: (subtasks: Subtask[]) => void;
-  existingCollaborators: Array<{ id: string; name: string; email: string }>;
+  existingCollaborators: Array<{ id: string; name: string; email: string; role?: string }>;
+  taskDueDate?: string | null;
 };
 
 type NewSubtask = {
   id: string;
   text: string;
   assignedTo?: string;
+  role?: string;
+  dueDate?: string;
 };
 
 export function SubtaskModal({ 
   isOpen, 
   onClose, 
   onSuccess, 
-  existingCollaborators 
+  existingCollaborators,
+  taskDueDate 
 }: SubtaskModalProps) {
   const [subtasks, setSubtasks] = useState<NewSubtask[]>([]);
   const [newSubtaskText, setNewSubtaskText] = useState("");
+  const [selectedRole, setSelectedRole] = useState("collaborator");
+  const [selectedDueDate, setSelectedDueDate] = useState("");
   const [loading, setLoading] = useState(false);
 
   const addSubtask = () => {
     if (!newSubtaskText.trim()) return;
 
+    // Validate due date against task due date
+    if (selectedDueDate && taskDueDate) {
+      const subtaskDate = new Date(selectedDueDate);
+      const taskDate = new Date(taskDueDate);
+      
+      if (subtaskDate > taskDate) {
+        alert(`Subtask due date cannot be after the task due date (${new Date(taskDueDate).toLocaleDateString()})`);
+        return;
+      }
+    }
+
     const newSubtask: NewSubtask = {
       id: Date.now().toString(),
-      text: newSubtaskText.trim()
+      text: newSubtaskText.trim(),
+      role: selectedRole,
+      dueDate: selectedDueDate || undefined
     };
 
     setSubtasks([...subtasks, newSubtask]);
     setNewSubtaskText("");
+    setSelectedDueDate("");
   };
 
   const removeSubtask = (id: string) => {
@@ -58,12 +78,14 @@ export function SubtaskModal({
     setLoading(true);
 
     try {
-      // Convert to Subtask format
+      // Convert to Subtask format with role and due date
       const formattedSubtasks: Subtask[] = subtasks.map(st => ({
         id: st.id,
         text: st.text,
         completed: false,
         assigned_to: st.assignedTo || null,
+        role: st.role || "collaborator",
+        due_date: st.dueDate || null,
         created_at: new Date().toISOString()
       }));
 
@@ -81,6 +103,8 @@ export function SubtaskModal({
   const resetForm = () => {
     setSubtasks([]);
     setNewSubtaskText("");
+    setSelectedRole("collaborator");
+    setSelectedDueDate("");
   };
 
   const getCollaboratorName = (id: string) => {
@@ -119,6 +143,34 @@ export function SubtaskModal({
                   />
                 </div>
                 
+                <div className="form-group">
+                  <label htmlFor="role">Role</label>
+                  <input
+                    id="role"
+                    type="text"
+                    value={selectedRole}
+                    onChange={(e) => setSelectedRole(e.target.value)}
+                    placeholder="Enter role (e.g., Developer, Designer, Tester)"
+                  />
+                </div>
+                
+                <div className="form-group">
+                  <label htmlFor="dueDate">Due Date</label>
+                  <input
+                    id="dueDate"
+                    type="date"
+                    value={selectedDueDate}
+                    onChange={(e) => setSelectedDueDate(e.target.value)}
+                    min={new Date().toISOString().split('T')[0]}
+                    max={taskDueDate ? new Date(taskDueDate).toISOString().split('T')[0] : undefined}
+                  />
+                  {taskDueDate && (
+                    <small style={{ color: '#94a3b8', fontSize: '0.7rem', marginTop: '2px', display: 'block' }}>
+                      Task due: {new Date(taskDueDate).toLocaleDateString()}
+                    </small>
+                  )}
+                </div>
+                
                 {existingCollaborators.length > 0 && (
                   <div className="form-group">
                     <label htmlFor="assignTo">Assign To</label>
@@ -131,10 +183,10 @@ export function SubtaskModal({
                         }
                       }}
                     >
-                      <option value="">Unassigned</option>
+                      <option value="">Select collaborator...</option>
                       {existingCollaborators.map((collaborator) => (
                         <option key={collaborator.id} value={collaborator.id}>
-                          {collaborator.name}
+                          {collaborator.name} {collaborator.email && `(${collaborator.email})`}
                         </option>
                       ))}
                     </select>
@@ -159,11 +211,23 @@ export function SubtaskModal({
                   <div key={subtask.id} className="subtask-item">
                     <span className="subtask-number">{index + 1}.</span>
                     <span className="subtask-text">{subtask.text}</span>
-                    {subtask.assignedTo && (
-                      <span className="subtask-assigned">
-                        {getCollaboratorName(subtask.assignedTo)}
-                      </span>
-                    )}
+                    <div className="subtask-details">
+                      {subtask.assignedTo && (
+                        <span className="subtask-assigned-person">
+                          Assigned to: {getCollaboratorName(subtask.assignedTo)}
+                        </span>
+                      )}
+                      {subtask.role && (
+                        <span className="subtask-role">
+                          Role: {subtask.role}
+                        </span>
+                      )}
+                      {subtask.dueDate && (
+                        <span className="subtask-due-date">
+                          Due: {new Date(subtask.dueDate).toLocaleDateString()}
+                        </span>
+                      )}
+                    </div>
                     <button
                       type="button"
                       className="remove-btn"

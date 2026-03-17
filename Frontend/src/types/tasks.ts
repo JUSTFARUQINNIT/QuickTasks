@@ -6,6 +6,8 @@ export type Subtask = {
   completed: boolean;
   completed_by?: string | null; // UID of who completed it
   assigned_to?: string | null; // UID of assigned collaborator
+  role?: string | null; // Role of the subtask (collaborator, reviewer, etc.)
+  due_date?: string | null; // Due date for the subtask
   created_at: string;
   completed_at?: string | null;
 };

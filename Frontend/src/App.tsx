@@ -7,10 +7,12 @@ import {
   useLocation,
   useNavigate,
 } from "react-router-dom";
+import { BrowserRouter } from "react-router-dom";
 import "./App.css";
 import { auth, db } from "./lib/firebaseClient";
 import type { User } from "firebase/auth";
 import { onAuthStateChanged, signOut } from "firebase/auth";
+import { ErrorBoundary } from "./components/ErrorBoundary";
 import {
   collection,
   doc,
@@ -923,24 +925,26 @@ function App() {
         </header>
 
         <main className="dashboard-content">
-          <Routes>
-            <Route path="/dashboard" element={<DashboardOverview />} />
-            <Route path="/tasks/add" element={<TasksPage mode="add" />} />
-            <Route path="/tasks/all" element={<TasksPage mode="all" />} />
-            <Route
-              path="/tasks/:taskId/comments"
-              element={<TaskCommentsPage />}
-            />
-            <Route
-              path="/tasks"
-              element={<Navigate to="/tasks/add" replace />}
-            />
-            <Route path="/categories" element={<CategoriesPage />} />
-            <Route path="/settings" element={<ProfilePage />} />
-            <Route path="/notifications" element={<NotificationsPage />} />
-            <Route path="/invitations" element={<InvitationsPage />} />
-            <Route path="*" element={<Navigate to="/dashboard" replace />} />
-          </Routes>
+          <ErrorBoundary>
+            <Routes>
+              <Route path="/dashboard" element={<DashboardOverview />} />
+              <Route path="/tasks/add" element={<TasksPage mode="add" />} />
+              <Route path="/tasks/all" element={<TasksPage mode="all" />} />
+              <Route
+                path="/tasks/:taskId/comments"
+                element={<TaskCommentsPage />}
+              />
+              <Route
+                path="/tasks"
+                element={<Navigate to="/tasks/add" replace />}
+              />
+              <Route path="/categories" element={<CategoriesPage />} />
+              <Route path="/settings" element={<ProfilePage />} />
+              <Route path="/notifications" element={<NotificationsPage />} />
+              <Route path="/invitations" element={<InvitationsPage />} />
+              <Route path="*" element={<Navigate to="/dashboard" replace />} />
+            </Routes>
+          </ErrorBoundary>
         </main>
       </div>
     </div>

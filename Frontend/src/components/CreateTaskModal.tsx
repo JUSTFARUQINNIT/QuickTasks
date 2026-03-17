@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { HiXMark, HiPlus, HiUser, HiTrash } from "react-icons/hi2";
 import { auth, db } from "../lib/firebaseClient";
 import { 
@@ -10,7 +10,7 @@ import {
   where, 
   getDocs 
 } from "firebase/firestore";
-import type { Subtask } from "../types/tasks";
+// import type { Subtasks } from "../types/tasks";
 
 type CreateTaskModalProps = {
   isOpen: boolean;

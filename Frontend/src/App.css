@@ -2471,23 +2471,27 @@
 }
 
 .subtask-completed-by {
-  color: var(--qt-text-soft);
+  color: #10b981;
   font-size: 0.7rem;
   font-style: italic;
   margin-left: 8px;
+  padding: 3px 6px;
+  background: rgba(16, 185, 129, 0.1);
+  border-radius: 4px;
+  font-weight: 500;
 }
 
 .progress-indicator {
-  width: 20px;
-  height: 20px;
+  width: 40px;
+  height: 40px;
   display: flex;
   align-items: center;
   justify-content: center;
 }
 
 .progress-circle {
-  width: 20px;
-  height: 20px;
+  width: 40px;
+  height: 40px;
   border-radius: 50%;
   display: flex;
   align-items: center;
@@ -2499,8 +2503,8 @@
 .progress-circle::before {
   content: '';
   position: absolute;
-  width: 16px;
-  height: 16px;
+  width: 32px;
+  height: 32px;
   border-radius: 50%;
   background: #020617;
 }
@@ -2508,9 +2512,9 @@
 .progress-text-small {
   position: relative;
   z-index: 1;
-  font-size: 0.6rem;
   font-weight: 600;
   color: #78d957;
+  font-size: 10px;
 }
 
 /* Profile Modal Styles */
@@ -2743,6 +2747,20 @@
   width: 20px;
   height: 20px;
   color: #78d957;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+/* Special styling for progress indicator item */
+.task-info-item-progress {
+  align-items: center;
+}
+
+.task-info-item-progress .task-info-icon {
+  width: 40px;
+  height: 40px;
   flex-shrink: 0;
 }
 
@@ -2938,6 +2956,47 @@
   cursor: not-allowed;
 }
 
+/* No Files Display */
+.no-files-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 20px;
+  text-align: center;
+  background: rgba(15, 23, 42, 0.3);
+  border-radius: 12px;
+  border: 2px dashed rgba(51, 65, 85, 0.5);
+  margin-bottom: 20px;
+}
+
+.no-files-icon {
+  width: 64px;
+  height: 64px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(51, 65, 85, 0.2);
+  border-radius: 50%;
+  color: var(--qt-text-soft);
+  font-size: 32px;
+  margin-bottom: 16px;
+}
+
+.no-files-text {
+  font-size: 1.1rem;
+  color: var(--qt-text);
+  margin: 0 0 8px 0;
+  font-weight: 500;
+}
+
+.no-files-subtext {
+  font-size: 0.9rem;
+  color: var(--qt-text-soft);
+  margin: 0;
+  line-height: 1.4;
+}
+
 /* Enhanced Team Member Avatars */
 .task-member-avatar {
   width: 36px;
@@ -3015,6 +3074,42 @@
   margin: 0 0 12px 0;
 }
 
+.subtask-details {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-left: 8px;
+  min-width: 150px;
+}
+
+.subtask-assigned-person {
+  padding: 3px 6px;
+  background: rgba(59, 130, 246, 0.15);
+  color: #3b82f6;
+  border-radius: 4px;
+  font-size: 0.7rem;
+  font-weight: 500;
+}
+
+.subtask-role {
+  padding: 3px 6px;
+  background: rgba(126, 217, 87, 0.15);
+  color: #78d957;
+  border-radius: 4px;
+  font-size: 0.7rem;
+  font-weight: 500;
+  text-transform: capitalize;
+}
+
+.subtask-due-date {
+  padding: 3px 6px;
+  background: rgba(245, 158, 11, 0.15);
+  color: #f59e0b;
+  border-radius: 4px;
+  font-size: 0.7rem;
+  font-weight: 500;
+}
+
 .subtask-item {
   display: flex;
   align-items: center;
@@ -3024,6 +3119,7 @@
   border-radius: 8px;
   border: 1px solid rgba(51, 65, 85, 0.3);
   margin-bottom: 8px;
+  flex-wrap: wrap;
 }
 
 .subtask-number {
@@ -3035,15 +3131,52 @@
 .subtask-text {
   flex: 1;
   color: var(--qt-text);
+  min-width: 150px;
 }
 
-.subtask-assigned {
-  padding: 4px 8px;
-  background: rgba(59, 130, 246, 0.15);
-  color: #3b82f6;
+.subtask-completed-by {
+  color: #10b981;
+  font-size: 0.7rem;
+  font-style: italic;
+  margin-left: 8px;
+  padding: 3px 6px;
+  background: rgba(16, 185, 129, 0.1);
   border-radius: 4px;
-  font-size: 0.75rem;
   font-weight: 500;
+}
+
+/* Task Details Screen Subtask Styles */
+.task-subtask-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  background: rgba(15, 23, 42, 0.3);
+  border-radius: 8px;
+  border: 1px solid rgba(51, 65, 85, 0.2);
+  margin-bottom: 8px;
+  flex-wrap: wrap;
+}
+
+.task-subtask-text {
+  flex: 1;
+  color: var(--qt-text);
+  min-width: 150px;
+}
+
+.task-subtask-text.completed {
+  text-decoration: line-through;
+  color: var(--qt-text-soft);
+}
+
+/* Task Details Screen Subtask Details */
+.task-subtask-item .subtask-assigned-person,
+.task-subtask-item .subtask-role,
+.task-subtask-item .subtask-due-date,
+.task-subtask-item .subtask-completed-by {
+  display: inline-block;
+  margin-left: 8px;
+  margin-top: 4px;
 }
 
 /* Create Task Modal */
@@ -3134,6 +3267,7 @@
   font-size: 0.9rem;
   outline: none;
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  font-family: inherit;
 }
 
 .form-group input:focus,
