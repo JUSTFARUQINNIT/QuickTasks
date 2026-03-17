@@ -1,13 +1,13 @@
 import { useState } from "react";
 import { HiXMark, HiPlus, HiUser, HiTrash } from "react-icons/hi2";
 import { auth, db } from "../lib/firebaseClient";
-import { 
-  collection, 
-  addDoc, 
+import {
+  collection,
+  addDoc,
   serverTimestamp,
-  query, 
-  where, 
-  getDocs 
+  query,
+  where,
+  getDocs,
 } from "firebase/firestore";
 
 type CreateTaskModalProps = {
@@ -29,7 +29,11 @@ type NewSubtask = {
   assignedTo?: string;
 };
 
-export function CreateTaskModal({ isOpen, onClose, onSuccess }: CreateTaskModalProps) {
+export function CreateTaskModal({
+  isOpen,
+  onClose,
+  onSuccess,
+}: CreateTaskModalProps) {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [priority, setPriority] = useState<"low" | "medium" | "high">("medium");
@@ -74,16 +78,16 @@ export function CreateTaskModal({ isOpen, onClose, onSuccess }: CreateTaskModalP
       }
 
       // Check if already added
-      if (collaborators.some(c => c.userId === userData.uid)) {
+      if (collaborators.some((c) => c.userId === userData.uid)) {
         setEmailError("User already added");
         return;
       }
-      
+
       const newCollaborator: CollaboratorRole = {
         userId: userData.uid,
         email: userData.email,
         name: userData.username || userData.email,
-        role: collaboratorRole
+        role: collaboratorRole,
       };
 
       setCollaborators([...collaborators, newCollaborator]);
@@ -102,7 +106,7 @@ export function CreateTaskModal({ isOpen, onClose, onSuccess }: CreateTaskModalP
 
     const newSubtask: NewSubtask = {
       id: Date.now().toString(),
-      text: newSubtaskText.trim()
+      text: newSubtaskText.trim(),
     };
 
     setSubtasks([...subtasks, newSubtask]);
@@ -110,21 +114,23 @@ export function CreateTaskModal({ isOpen, onClose, onSuccess }: CreateTaskModalP
   };
 
   const removeSubtask = (id: string) => {
-    setSubtasks(subtasks.filter(st => st.id !== id));
+    setSubtasks(subtasks.filter((st) => st.id !== id));
   };
 
   const updateSubtaskAssignment = (subtaskId: string, assignedTo: string) => {
-    setSubtasks(subtasks.map(st => 
-      st.id === subtaskId ? { ...st, assignedTo } : st
-    ));
+    setSubtasks(
+      subtasks.map((st) => (st.id === subtaskId ? { ...st, assignedTo } : st)),
+    );
   };
 
   const removeCollaborator = (userId: string) => {
-    setCollaborators(collaborators.filter(c => c.userId !== userId));
+    setCollaborators(collaborators.filter((c) => c.userId !== userId));
     // Remove assignments for removed collaborator
-    setSubtasks(subtasks.map(st => 
-      st.assignedTo === userId ? { ...st, assignedTo: undefined } : st
-    ));
+    setSubtasks(
+      subtasks.map((st) =>
+        st.assignedTo === userId ? { ...st, assignedTo: undefined } : st,
+      ),
+    );
   };
 
   const calculateProgress = () => {
@@ -147,31 +153,36 @@ export function CreateTaskModal({ isOpen, onClose, onSuccess }: CreateTaskModalP
         category: category.trim() || null,
         user_id: currentUser.uid,
         shared: collaborators.length > 0,
-        collaborators: collaborators.map(c => c.userId),
+        collaborators: collaborators.map((c) => c.userId),
         completed: false,
         created_at: serverTimestamp(),
         order: Date.now(),
-        subtasks: subtasks.map(st => ({
+        subtasks: subtasks.map((st) => ({
           id: st.id,
           text: st.text,
           completed: false,
           assigned_to: st.assignedTo || null,
-          created_at: new Date().toISOString()
+          created_at: new Date().toISOString(),
         })),
-        attachments: []
+        attachments: [],
       };
 
       const docRef = await addDoc(collection(db, "tasks"), taskData);
-      
+
       // Create projections for each collaborator
       for (const collaborator of collaborators) {
-        const userTasksRef = collection(db, "userTasks", collaborator.userId, "tasks");
+        const userTasksRef = collection(
+          db,
+          "userTasks",
+          collaborator.userId,
+          "tasks",
+        );
         await addDoc(userTasksRef, {
           ...taskData,
           id: docRef.id,
           isInvited: true,
           ref: docRef.id,
-          updatedAt: new Date().toISOString()
+          updatedAt: new Date().toISOString(),
         });
       }
 
@@ -216,7 +227,7 @@ export function CreateTaskModal({ isOpen, onClose, onSuccess }: CreateTaskModalP
           {/* Basic Task Information */}
           <div className="form-section">
             <h3>Task Details</h3>
-            
+
             <div className="form-group">
               <label htmlFor="title">Task Title *</label>
               <input
@@ -246,7 +257,9 @@ export function CreateTaskModal({ isOpen, onClose, onSuccess }: CreateTaskModalP
                 <select
                   id="priority"
                   value={priority}
-                  onChange={(e) => setPriority(e.target.value as "low" | "medium" | "high")}
+                  onChange={(e) =>
+                    setPriority(e.target.value as "low" | "medium" | "high")
+                  }
                 >
                   <option value="low">Low</option>
                   <option value="medium">Medium</option>
@@ -280,7 +293,7 @@ export function CreateTaskModal({ isOpen, onClose, onSuccess }: CreateTaskModalP
           {/* Collaborators Section */}
           <div className="form-section">
             <h3>Collaborators</h3>
-            
+
             <div className="collaborator-add">
               <div className="form-row">
                 <div className="form-group">
@@ -295,9 +308,11 @@ export function CreateTaskModal({ isOpen, onClose, onSuccess }: CreateTaskModalP
                     }}
                     placeholder="Enter email address"
                   />
-                  {emailError && <span className="error-text">{emailError}</span>}
+                  {emailError && (
+                    <span className="error-text">{emailError}</span>
+                  )}
                 </div>
-                
+
                 <div className="form-group">
                   <label htmlFor="role">Role</label>
                   <select
@@ -311,7 +326,7 @@ export function CreateTaskModal({ isOpen, onClose, onSuccess }: CreateTaskModalP
                   </select>
                 </div>
               </div>
-              
+
               <button
                 type="button"
                 className="add-collaborator-btn"
@@ -330,10 +345,16 @@ export function CreateTaskModal({ isOpen, onClose, onSuccess }: CreateTaskModalP
                     <div className="collaborator-info">
                       <HiUser />
                       <div>
-                        <div className="collaborator-name">{collaborator.name}</div>
-                        <div className="collaborator-email">{collaborator.email}</div>
+                        <div className="collaborator-name">
+                          {collaborator.name}
+                        </div>
+                        <div className="collaborator-email">
+                          {collaborator.email}
+                        </div>
                       </div>
-                      <span className="collaborator-role">{collaborator.role}</span>
+                      <span className="collaborator-role">
+                        {collaborator.role}
+                      </span>
                     </div>
                     <button
                       type="button"
@@ -351,7 +372,7 @@ export function CreateTaskModal({ isOpen, onClose, onSuccess }: CreateTaskModalP
           {/* Subtasks Section */}
           <div className="form-section">
             <h3>Subtasks</h3>
-            
+
             <div className="subtask-add">
               <div className="form-row">
                 <div className="form-group">
@@ -362,25 +383,37 @@ export function CreateTaskModal({ isOpen, onClose, onSuccess }: CreateTaskModalP
                     value={newSubtaskText}
                     onChange={(e) => setNewSubtaskText(e.target.value)}
                     placeholder="Enter subtask description"
-                    onKeyPress={(e) => e.key === "Enter" && (e.preventDefault(), addSubtask())}
+                    onKeyPress={(e) =>
+                      e.key === "Enter" && (e.preventDefault(), addSubtask())
+                    }
                   />
                 </div>
-                
+
                 {collaborators.length > 0 && (
                   <div className="form-group">
                     <label htmlFor="assignTo">Assign To</label>
                     <select
                       id="assignTo"
-                      value={subtasks.find(st => st.id === subtasks[subtasks.length - 1]?.id)?.assignedTo || ""}
+                      value={
+                        subtasks.find(
+                          (st) => st.id === subtasks[subtasks.length - 1]?.id,
+                        )?.assignedTo || ""
+                      }
                       onChange={(e) => {
                         if (subtasks.length > 0) {
-                          updateSubtaskAssignment(subtasks[subtasks.length - 1].id, e.target.value);
+                          updateSubtaskAssignment(
+                            subtasks[subtasks.length - 1].id,
+                            e.target.value,
+                          );
                         }
                       }}
                     >
                       <option value="">Unassigned</option>
                       {collaborators.map((collaborator) => (
-                        <option key={collaborator.userId} value={collaborator.userId}>
+                        <option
+                          key={collaborator.userId}
+                          value={collaborator.userId}
+                        >
                           {collaborator.name}
                         </option>
                       ))}
@@ -388,7 +421,7 @@ export function CreateTaskModal({ isOpen, onClose, onSuccess }: CreateTaskModalP
                   </div>
                 )}
               </div>
-              
+
               <button
                 type="button"
                 className="add-subtask-btn"
@@ -408,7 +441,9 @@ export function CreateTaskModal({ isOpen, onClose, onSuccess }: CreateTaskModalP
                     <span className="subtask-text">{subtask.text}</span>
                     {subtask.assignedTo && (
                       <span className="subtask-assigned">
-                        {collaborators.find(c => c.userId === subtask.assignedTo)?.name || "Assigned"}
+                        {collaborators.find(
+                          (c) => c.userId === subtask.assignedTo,
+                        )?.name || "Assigned"}
                       </span>
                     )}
                     <button
@@ -429,12 +464,14 @@ export function CreateTaskModal({ isOpen, onClose, onSuccess }: CreateTaskModalP
             <div className="progress-preview">
               <h4>Task Progress</h4>
               <div className="progress-bar">
-                <div 
-                  className="progress-fill" 
+                <div
+                  className="progress-fill"
                   style={{ width: `${calculateProgress()}%` }}
                 />
               </div>
-              <span className="progress-text">0 / {subtasks.length} completed (0%)</span>
+              <span className="progress-text">
+                0 / {subtasks.length} completed (0%)
+              </span>
             </div>
           )}
 
@@ -443,7 +480,11 @@ export function CreateTaskModal({ isOpen, onClose, onSuccess }: CreateTaskModalP
             <button type="button" className="btn-secondary" onClick={onClose}>
               Cancel
             </button>
-            <button type="submit" className="btn-primary" disabled={loading || !title.trim()}>
+            <button
+              type="submit"
+              className="btn-primary"
+              disabled={loading || !title.trim()}
+            >
               {loading ? "Creating..." : "Create Task"}
             </button>
           </div>

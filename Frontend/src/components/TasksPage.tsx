@@ -14,7 +14,6 @@ import {
   onSnapshot,
   orderBy,
   query,
-  serverTimestamp,
   updateDoc,
   where,
   writeBatch,
@@ -25,10 +24,13 @@ import {
 const originalConsoleError = console.error;
 console.error = (...args) => {
   const message = args[0];
-  if (typeof message === 'string' && message.includes('permission-denied')) {
+  if (typeof message === "string" && message.includes("permission-denied")) {
     return; // Suppress permission-denied errors
   }
-  if (typeof message === 'string' && message.includes('INTERNAL ASSERTION FAILED')) {
+  if (
+    typeof message === "string" &&
+    message.includes("INTERNAL ASSERTION FAILED")
+  ) {
     return; // Suppress assertion errors
   }
   originalConsoleError.apply(console, args);
@@ -89,19 +91,7 @@ export function TasksPage({ mode = "both" }: TasksPageProps) {
 
     const tasksRef = collection(db, "tasks");
 
-    // Owner tasks: (user_id == auth.uid)
     const ownerQuery = query(tasksRef, where("user_id", "==", user.uid));
-
-    // Collaborator tasks (legacy shared model): (collaborators array contains auth.uid)
-    // const collaboratorQueryOrdered = query(
-    //   tasksRef,
-    //   where("collaborators", "array-contains", user.uid),
-    //   orderBy("order", "asc"),
-    // );
-    // const collaboratorQueryTempNoOrderBy = query(
-    //   tasksRef,
-    //   where("collaborators", "array-contains", user.uid),
-    // );
 
     // Invited tasks (projection model): stored under userTasks/{userId}/tasks/{taskId}
     const invitedTasksQuery = collection(db, "userTasks", user.uid, "tasks");
@@ -139,11 +129,14 @@ export function TasksPage({ mode = "both" }: TasksPageProps) {
                 // Keep invited-specific fields
                 invitedAt: invitedData.invitedAt,
                 invitedBy: invitedData.invitedBy,
-              }
+              },
             };
           }
         } catch (err) {
-          console.warn(`Could not fetch master task ${masterId}, using invited data:`, err);
+          console.warn(
+            `Could not fetch master task ${masterId}, using invited data:`,
+            err,
+          );
         }
 
         // Fallback to invited data if master fetch fails
@@ -159,9 +152,9 @@ export function TasksPage({ mode = "both" }: TasksPageProps) {
             collaborators: invitedData.collaborators || [],
             shared: invitedData.shared || false,
             completed: invitedData.completed || false,
-          }
+          },
         };
-      })
+      }),
     );
 
     // Combine all task data
@@ -172,8 +165,14 @@ export function TasksPage({ mode = "both" }: TasksPageProps) {
 
     // Sort by order field, treating missing/invalid order as large number
     const sortedTasks = allTasks.sort((a, b) => {
-      const orderA = typeof (a.data as any).order === "number" ? (a.data as any).order : 999999;
-      const orderB = typeof (b.data as any).order === "number" ? (b.data as any).order : 999999;
+      const orderA =
+        typeof (a.data as any).order === "number"
+          ? (a.data as any).order
+          : 999999;
+      const orderB =
+        typeof (b.data as any).order === "number"
+          ? (b.data as any).order
+          : 999999;
       return orderA - orderB;
     });
 
@@ -305,62 +304,72 @@ export function TasksPage({ mode = "both" }: TasksPageProps) {
         if (taskIds.length > 0) {
           const tasksQuery = query(
             collection(db, "tasks"),
-            where(documentId(), "in", taskIds)
+            where(documentId(), "in", taskIds),
           );
 
-          const unsubscribeTasks = onSnapshot(tasksQuery, (snapshot) => {
-            if (!isMounted) return;
+          const unsubscribeTasks = onSnapshot(
+            tasksQuery,
+            (snapshot) => {
+              if (!isMounted) return;
 
-            const updatedTasks: Task[] = [];
-            snapshot.forEach((doc) => {
-              const data = doc.data();
-              const ownerId = typeof data.user_id === "string" ? data.user_id : null;
-              const isInvited = data.isInvited === true;
+              const updatedTasks: Task[] = [];
+              snapshot.forEach((doc) => {
+                const data = doc.data();
+                const ownerId =
+                  typeof data.user_id === "string" ? data.user_id : null;
+                const isInvited = data.isInvited === true;
 
-              updatedTasks.push({
-                id: doc.id,
-                ...(data as Omit<Task, "id">),
-                shared: ownerId !== user.uid,
-                ownerId: ownerId,
-                isInvited,
-                ref: (data.ref as string | undefined) ?? doc.id,
+                updatedTasks.push({
+                  id: doc.id,
+                  ...(data as Omit<Task, "id">),
+                  shared: ownerId !== user.uid,
+                  ownerId: ownerId,
+                  isInvited,
+                  ref: (data.ref as string | undefined) ?? doc.id,
+                });
               });
-            });
 
-            // Sort by order
-            updatedTasks.sort((a, b) => {
-              if (a.completed !== b.completed) {
-                return a.completed ? 1 : -1;
-              }
-              return (a.order ?? 0) - (b.order ?? 0);
-            });
+              // Sort by order
+              updatedTasks.sort((a, b) => {
+                if (a.completed !== b.completed) {
+                  return a.completed ? 1 : -1;
+                }
+                return (a.order ?? 0) - (b.order ?? 0);
+              });
 
-            setTasks(updatedTasks);
-          }, (error) => {
-            console.error("Error listening to task updates:", error);
-          });
+              setTasks(updatedTasks);
+            },
+            (error) => {
+              console.error("Error listening to task updates:", error);
+            },
+          );
 
           unsubscribers.push(unsubscribeTasks);
         }
 
         // Set up real-time listener for categories
-        const unsubscribeCategories = onSnapshot(categoriesQuery, (snapshot) => {
-          if (!isMounted) return;
+        const unsubscribeCategories = onSnapshot(
+          categoriesQuery,
+          (snapshot) => {
+            if (!isMounted) return;
 
-          const categoryData = snapshot.docs.map(
-            (d) => d.data() as { name?: string | null },
-          );
+            const categoryData = snapshot.docs.map(
+              (d) => d.data() as { name?: string | null },
+            );
 
-          setAvailableCategories(
-            Array.from(
-              new Set(
-                (categoryData ?? [])
-                  .map((c) => ("name" in c ? String(c.name ?? "") : "").trim())
-                  .filter((value) => value.length > 0),
-              ),
-            ).sort((a, b) => a.localeCompare(b)),
-          );
-        });
+            setAvailableCategories(
+              Array.from(
+                new Set(
+                  (categoryData ?? [])
+                    .map((c) =>
+                      ("name" in c ? String(c.name ?? "") : "").trim(),
+                    )
+                    .filter((value) => value.length > 0),
+                ),
+              ).sort((a, b) => a.localeCompare(b)),
+            );
+          },
+        );
 
         unsubscribers.push(unsubscribeCategories);
       } catch (err) {
@@ -399,8 +408,10 @@ export function TasksPage({ mode = "both" }: TasksPageProps) {
       return;
     }
 
-    console.log('Real-time listener temporarily disabled for shared tasks to prevent assertion errors');
-    
+    console.log(
+      "Real-time listener temporarily disabled for shared tasks to prevent assertion errors",
+    );
+
     return () => {
       if (invitedTaskUnsubscribeRef.current) {
         invitedTaskUnsubscribeRef.current();
@@ -727,42 +738,6 @@ export function TasksPage({ mode = "both" }: TasksPageProps) {
     }
   }
 
-  // async function handleUpdate(task: Task, updates: Partial<Task>) {
-  //   try {
-  //     if (!navigator.onLine) {
-  //       // Offline queue currently only supports master tasks. For invited tasks we
-  //       // update local state only; the projection will be corrected on the next load.
-  //       if (!task.isInvited) {
-  //         enqueueOfflineAction({
-  //           type: "update",
-  //           payload: { id: task.id, updates },
-  //         });
-  //       }
-  //     } else if (task.isInvited) {
-  //       const user = auth.currentUser;
-  //       if (!user)
-  //         throw new Error("You must be signed in to update shared tasks.");
-  //       const invitedRef = doc(
-  //         collection(db, "userTasks", user.uid, "tasks"),
-  //         task.ref ?? task.id,
-  //       );
-  //       await updateDoc(invitedRef, {
-  //         completed: updates.completed,
-  //         completed_at: updates.completed_at,
-  //         updatedAt: serverTimestamp(),
-  //       });
-  //     } else {
-  //       const ref = doc(collection(db, "tasks"), task.id);
-  //       await updateDoc(ref, updates);
-  //     }
-  //   } catch (err) {
-  //     const message =
-  //       err instanceof Error ? err.message : "Could not update task.";
-  //     setError(message);
-  //     // reload tasks on next mount; for now we won’t roll back immediately
-  //   }
-  // }
-
   async function handleDelete(task: Task) {
     const confirmed = window.confirm(
       `Are you sure you want to delete "${task.title}"?`,
@@ -1087,14 +1062,17 @@ export function TasksPage({ mode = "both" }: TasksPageProps) {
 
                       // Calculate subtask progress for better status determination
                       const subtasks = task.subtasks || [];
-                      const completedSubtasks = subtasks.filter(st => st.completed).length;
+                      const completedSubtasks = subtasks.filter(
+                        (st) => st.completed,
+                      ).length;
                       const totalSubtasks = subtasks.length;
-                      const hasActiveProgress = totalSubtasks > 0 && completedSubtasks > 0;
+                      const hasActiveProgress =
+                        totalSubtasks > 0 && completedSubtasks > 0;
                       // const progressPercentage = totalSubtasks > 0 ? (completedSubtasks / totalSubtasks) * 100 : 0;
 
                       // Enhanced status calculation based on task completion, subtask progress, and due date
                       let statusLabel = "Pending";
-                      
+
                       if (task.completed) {
                         statusLabel = "Completed";
                       } else if (isOverdue) {
@@ -1190,14 +1168,17 @@ export function TasksPage({ mode = "both" }: TasksPageProps) {
 
                       // Calculate subtask progress for better status determination
                       const subtasks = task.subtasks || [];
-                      const completedSubtasks = subtasks.filter(st => st.completed).length;
+                      const completedSubtasks = subtasks.filter(
+                        (st) => st.completed,
+                      ).length;
                       const totalSubtasks = subtasks.length;
-                      const hasActiveProgress = totalSubtasks > 0 && completedSubtasks > 0;
+                      const hasActiveProgress =
+                        totalSubtasks > 0 && completedSubtasks > 0;
                       // const progressPercentage = totalSubtasks > 0 ? (completedSubtasks / totalSubtasks) * 100 : 0;
 
                       // Enhanced status calculation based on task completion, subtask progress, and due date
                       let statusLabel = "Pending";
-                      
+
                       if (task.completed) {
                         statusLabel = "Completed";
                       } else if (isOverdue) {
@@ -1325,7 +1306,7 @@ export function TasksPage({ mode = "both" }: TasksPageProps) {
             startEdit(task);
             setSelectedTask(null);
           }}
-          onDelete={(task: Task) => void handleDelete(task)}
+          onDelete={() => handleDelete(selectedTask)}
           onInviteCollaborator={() => setShowInviteModal(true)}
         />
       )}

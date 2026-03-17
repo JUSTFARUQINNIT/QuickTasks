@@ -64,7 +64,7 @@ export function TaskDetailsScreen({
   collaboratorLabels,
   onBack,
   onEdit,
-  // onDelete,
+  onDelete,
   onInviteCollaborator,
   onOpenComments,
 }: TaskDetailsScreenProps) {
@@ -84,10 +84,10 @@ export function TaskDetailsScreen({
   const [currentTask, setCurrentTask] = useState<Task>(task);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [notification, setNotification] = useState<{
-    type: 'success' | 'error';
+    type: "success" | "error";
     message: string;
     show: boolean;
-  }>({ type: 'success', message: '', show: false });
+  }>({ type: "success", message: "", show: false });
 
   const handleDeleteTask = async () => {
     if (!isOwner) {
@@ -99,16 +99,16 @@ export function TaskDetailsScreen({
   };
 
   const showSuccessNotification = (message: string) => {
-    setNotification({ type: 'success', message, show: true });
+    setNotification({ type: "success", message, show: true });
     setTimeout(() => {
-      setNotification(prev => ({ ...prev, show: false }));
+      setNotification((prev) => ({ ...prev, show: false }));
     }, 3000);
   };
 
   const showErrorNotification = (message: string) => {
-    setNotification({ type: 'error', message, show: true });
+    setNotification({ type: "error", message, show: true });
     setTimeout(() => {
-      setNotification(prev => ({ ...prev, show: false }));
+      setNotification((prev) => ({ ...prev, show: false }));
     }, 5000);
   };
 
@@ -138,14 +138,14 @@ export function TaskDetailsScreen({
     if (!confirm("Are you sure you want to delete this subtask?")) return;
 
     try {
-      const updatedSubtasks = subtasks.filter(st => st.id !== subtaskId);
+      const updatedSubtasks = subtasks.filter((st) => st.id !== subtaskId);
       const taskRef = doc(db, "tasks", task.id);
       await updateDoc(taskRef, {
-        subtasks: updatedSubtasks
+        subtasks: updatedSubtasks,
       });
 
       // Update local state
-      // setSubtasks(updatedSubtasks);
+      setSubtasks(updatedSubtasks);
       showSuccessNotification("Subtask deleted successfully!");
     } catch (error) {
       console.error("Error deleting subtask:", error);
@@ -156,14 +156,18 @@ export function TaskDetailsScreen({
   // Real-time task listener
   useEffect(() => {
     const taskRef = doc(db, "tasks", task.id);
-    const unsubscribe = onSnapshot(taskRef, (docSnapshot) => {
-      if (docSnapshot.exists()) {
-        const updatedTask = docSnapshot.data() as Task;
-        setCurrentTask(updatedTask);
-      }
-    }, (error) => {
-      console.error("Error listening to task updates:", error);
-    });
+    const unsubscribe = onSnapshot(
+      taskRef,
+      (docSnapshot) => {
+        if (docSnapshot.exists()) {
+          const updatedTask = docSnapshot.data() as Task;
+          setCurrentTask(updatedTask);
+        }
+      },
+      (error) => {
+        console.error("Error listening to task updates:", error);
+      },
+    );
 
     return () => unsubscribe();
   }, [task.id]);
@@ -201,8 +205,8 @@ export function TaskDetailsScreen({
             // Create a default profile if it doesn't exist
             profiles[userId] = {
               username: `User ${userId.slice(0, 8)}`,
-              email: '',
-              role: 'collaborator'
+              email: "",
+              role: "collaborator",
             };
           }
         } catch (error) {
@@ -210,8 +214,8 @@ export function TaskDetailsScreen({
           // Create a default profile on error
           profiles[userId] = {
             username: `User ${userId.slice(0, 8)}`,
-            email: '',
-            role: 'collaborator'
+            email: "",
+            role: "collaborator",
           };
         }
       }
@@ -223,7 +227,7 @@ export function TaskDetailsScreen({
   }, [currentTask.ownerId, currentTask.collaborators]);
 
   const toggleSubtask = async (subtaskId: string) => {
-    const subtask = subtasks.find(st => st.id === subtaskId);
+    const subtask = subtasks.find((st) => st.id === subtaskId);
     if (!subtask) return;
 
     // Check if user can complete this subtask
@@ -239,31 +243,34 @@ export function TaskDetailsScreen({
 
     try {
       const isCompleting = !subtask.completed;
-      
+
       // Use backend API for subtask updates to handle permissions properly
       const token = await auth.currentUser?.getIdToken();
       if (!token) {
         throw new Error("Authentication required");
       }
 
-      const response = await fetch(`http://localhost:8787/api/tasks/${task.id}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
+      const response = await fetch(
+        `http://localhost:8787/api/tasks/${task.id}`,
+        {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            type: "subtask",
+            data: {
+              id: subtaskId,
+              completed: isCompleting,
+            },
+          }),
         },
-        body: JSON.stringify({
-          type: 'subtask',
-          data: {
-            id: subtaskId,
-            completed: isCompleting
-          }
-        })
-      });
+      );
 
       if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to update subtask');
+        throw new Error(errorData.error || "Failed to update subtask");
       }
 
       // Create notification for completed subtask
@@ -285,7 +292,7 @@ export function TaskDetailsScreen({
     try {
       const taskRef = doc(db, "tasks", task.id);
       await updateDoc(taskRef, {
-        subtasks: arrayUnion(...newSubtasks)
+        subtasks: arrayUnion(...newSubtasks),
       });
 
       // Create notifications for assigned collaborators
@@ -313,7 +320,7 @@ export function TaskDetailsScreen({
             message: `You have been assigned a new subtask: "${subtask.text}" in task "${currentTask.title}"`,
             isRead: false,
             createdAt: new Date().toISOString(),
-            createdBy: currentUser.uid
+            createdBy: currentUser.uid,
           });
         } catch (error) {
           console.error("Error creating notification:", error);
@@ -322,7 +329,10 @@ export function TaskDetailsScreen({
     }
   };
 
-  const createSubtaskCompletionNotification = async (subtask: any, currentUser: any) => {
+  const createSubtaskCompletionNotification = async (
+    subtask: any,
+    currentUser: any,
+  ) => {
     try {
       // Notify task owner about subtask completion
       if (currentTask.ownerId && currentTask.ownerId !== currentUser.uid) {
@@ -337,7 +347,7 @@ export function TaskDetailsScreen({
           message: `Subtask "${subtask.text}" has been completed by ${currentUser.email || currentUser.uid}`,
           isRead: false,
           createdAt: new Date().toISOString(),
-          createdBy: currentUser.uid
+          createdBy: currentUser.uid,
         });
       }
     } catch (error) {
@@ -347,7 +357,7 @@ export function TaskDetailsScreen({
 
   const getFileTypeIcon = (fileName: string) => {
     const extension = fileName.split(".").pop()?.toLowerCase();
-    
+
     switch (extension) {
       case "pdf":
         return { icon: HiDocument, color: "#ef4444", label: "PDF" };
@@ -393,7 +403,10 @@ export function TaskDetailsScreen({
 
     const file = files[0];
     // Allow all task participants (owner and collaborators) to upload files
-    if (!isOwner && !currentTask.collaborators?.includes(auth.currentUser?.uid || "")) {
+    if (
+      !isOwner &&
+      !currentTask.collaborators?.includes(auth.currentUser?.uid || "")
+    ) {
       showErrorNotification("Only task participants can upload files.");
       return;
     }
@@ -442,11 +455,11 @@ export function TaskDetailsScreen({
 
   const downloadFile = (attachment: any) => {
     // Create a temporary link element to trigger download
-    const link = document.createElement('a');
+    const link = document.createElement("a");
     link.href = attachment.url;
-    link.target = '_blank';
+    link.target = "_blank";
     link.download = attachment.name;
-    link.style.display = 'none';
+    link.style.display = "none";
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -462,7 +475,9 @@ export function TaskDetailsScreen({
 
     try {
       const taskRef = doc(db, "tasks", currentTask.id);
-      const updatedAttachments = attachments.filter(att => att.id !== attachmentId);
+      const updatedAttachments = attachments.filter(
+        (att) => att.id !== attachmentId,
+      );
       await updateDoc(taskRef, { attachments: updatedAttachments });
     } catch (error) {
       console.error("Error deleting file:", error);
@@ -478,12 +493,15 @@ export function TaskDetailsScreen({
 
     try {
       const storage = getFirebaseStorage();
-      const fileRef = storageRef(storage, `tasks/${currentTask.id}/${Date.now()}_${newFile.name}`);
-      
+      const fileRef = storageRef(
+        storage,
+        `tasks/${currentTask.id}/${Date.now()}_${newFile.name}`,
+      );
+
       // Upload new file
       await uploadBytes(fileRef, newFile);
       const downloadURL = await getDownloadURL(fileRef);
-      
+
       // Create updated attachment object
       const updatedAttachment = {
         id: attachmentId,
@@ -497,8 +515,8 @@ export function TaskDetailsScreen({
 
       // Update task document
       const taskRef = doc(db, "tasks", currentTask.id);
-      const updatedAttachments = attachments.map(att => 
-        att.id === attachmentId ? updatedAttachment : att
+      const updatedAttachments = attachments.map((att) =>
+        att.id === attachmentId ? updatedAttachment : att,
       );
       await updateDoc(taskRef, { attachments: updatedAttachments });
     } catch (error) {
@@ -529,55 +547,57 @@ export function TaskDetailsScreen({
 
   const calculateProgress = () => {
     if (subtasks.length === 0) return 0;
-    const completedCount = subtasks.filter(st => st.completed).length;
+    const completedCount = subtasks.filter((st) => st.completed).length;
     return Math.round((completedCount / subtasks.length) * 100);
   };
 
   const canCompleteSubtask = (subtask: any) => {
     const currentUser = auth.currentUser;
     if (!currentUser) return false;
-    
+
     // Owner can complete any subtask
     if (isOwner) return true;
-    
+
     // If subtask has an "owner" role, only that assigned owner can complete it
     if (subtask.role === "owner") {
       return subtask.assigned_to === currentUser.uid;
     }
-    
+
     // For regular subtasks without owner role, assigned collaborators can complete
     return subtask.assigned_to === currentUser.uid;
   };
 
   const getSubtaskAssignee = (assignedTo: string | null | undefined) => {
     if (!assignedTo) return null;
-    
+
     const profile = profileData[assignedTo];
     if (profile) {
-      return profile.username || profile.email || 'Unknown User';
+      return profile.username || profile.email || "Unknown User";
     }
-    
+
     // Fallback for when profile data is not loaded yet
     const currentUser = auth.currentUser;
     if (currentUser && assignedTo === currentUser.uid) {
-      return 'You';
+      return "You";
     }
-    
+
     // Check if this is the owner
     if (task.ownerId && assignedTo === task.ownerId) {
-      return ownerLabel || 'Task Owner';
+      return ownerLabel || "Task Owner";
     }
-    
+
     // Check collaborator labels
     if (collaboratorLabels) {
-      const collaboratorLabel = collaboratorLabels.find((label: any) => label.id === assignedTo);
+      const collaboratorLabel = collaboratorLabels.find(
+        (label: any) => label.id === assignedTo,
+      );
       if (collaboratorLabel) {
         const labelData = collaboratorLabel as any;
-        return labelData.name || labelData.email || 'Unknown Collaborator';
+        return labelData.name || labelData.email || "Unknown Collaborator";
       }
     }
-    
-    return 'Unknown User';
+
+    return "Unknown User";
   };
 
   const getStatusClass = () => {
@@ -605,22 +625,38 @@ export function TaskDetailsScreen({
 
   return (
     <div className="task-details-fullscreen">
-      <TaskHeader isOwner={isOwner} onBack={onBack} onEdit={onEdit} onDelete={handleDeleteTask} />
+      <TaskHeader
+        isOwner={isOwner}
+        onBack={onBack}
+        onEdit={onEdit}
+        onDelete={handleDeleteTask}
+      />
 
       <div className="task-details-layout">
         <div className="task-details-main">
           {/* Task Title Section */}
           <section className="task-details-section-top">
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
-              <h3 className="task-section-title" style={{ margin: 0 }}>Task Title</h3>
-              <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                marginBottom: "16px",
+              }}
+            >
+              <h3 className="task-section-title" style={{ margin: 0 }}>
+                Task Title
+              </h3>
+              <div
+                style={{ display: "flex", alignItems: "center", gap: "12px" }}
+              >
                 {task.shared && (
                   <div className="task-shared-indicator">
                     <HiShare className="task-shared-icon" />
                     <span>Shared</span>
                   </div>
                 )}
-                <button 
+                <button
                   className="task-comments-btn"
                   onClick={onOpenComments}
                   title="View Comments"
@@ -638,7 +674,7 @@ export function TaskDetailsScreen({
               <span className={`task-status ${getStatusClass()}`}>
                 {getStatusText()}
               </span>
-              </div>
+            </div>
           </section>
 
           {/* Team Members Section */}
@@ -775,8 +811,8 @@ export function TaskDetailsScreen({
                       onClick={() => downloadFile(attachment)}
                       style={{ cursor: "pointer" }}
                     >
-                      <div 
-                        className="task-file-icon" 
+                      <div
+                        className="task-file-icon"
                         style={{ color: fileIcon.color }}
                       >
                         <IconComponent />
@@ -787,7 +823,9 @@ export function TaskDetailsScreen({
                           <span className="task-file-size">
                             {(attachment.size / 1024).toFixed(1)} KB
                           </span>
-                          <span className="task-file-type">{fileIcon.label}</span>
+                          <span className="task-file-type">
+                            {fileIcon.label}
+                          </span>
                         </div>
                       </div>
                       <div className="task-file-actions">
@@ -807,10 +845,12 @@ export function TaskDetailsScreen({
                               className="task-file-action-btn update"
                               onClick={(e) => {
                                 e.stopPropagation();
-                                const input = document.createElement('input');
-                                input.type = 'file';
+                                const input = document.createElement("input");
+                                input.type = "file";
                                 input.onchange = (event) => {
-                                  const file = (event.target as HTMLInputElement).files?.[0];
+                                  const file = (
+                                    event.target as HTMLInputElement
+                                  ).files?.[0];
                                   if (file) updateFile(attachment.id, file);
                                 };
                                 input.click();
@@ -837,7 +877,8 @@ export function TaskDetailsScreen({
                 })
               )}
               {/* Enable upload for all task participants */}
-              {(isOwner || task.collaborators?.includes(auth.currentUser?.uid || "")) && (
+              {(isOwner ||
+                task.collaborators?.includes(auth.currentUser?.uid || "")) && (
                 <>
                   <input
                     ref={fileInputRef}
@@ -895,16 +936,18 @@ export function TaskDetailsScreen({
                       onClick={() => toggleSubtask(subtask.id)}
                       disabled={!canCompleteSubtask(subtask)}
                       title={
-                        !canCompleteSubtask(subtask) 
-                          ? subtask.assigned_to 
-                            ? "This subtask is assigned to someone else" 
+                        !canCompleteSubtask(subtask)
+                          ? subtask.assigned_to
+                            ? "This subtask is assigned to someone else"
                             : "This subtask is not assigned to anyone"
                           : "Toggle completion"
                       }
                     >
                       {subtask.completed && <HiCheck />}
                     </button>
-                    <span className={`task-subtask-text ${subtask.completed ? "completed" : ""}`}>
+                    <span
+                      className={`task-subtask-text ${subtask.completed ? "completed" : ""}`}
+                    >
                       {subtask.text}
                     </span>
                     {subtask.assigned_to && (
@@ -913,9 +956,7 @@ export function TaskDetailsScreen({
                       </span>
                     )}
                     {subtask.role && (
-                      <span className="subtask-role">
-                        Role: {subtask.role}
-                      </span>
+                      <span className="subtask-role">Role: {subtask.role}</span>
                     )}
                     {subtask.due_date && !subtask.completed && (
                       <span className="subtask-due-date">
@@ -924,7 +965,8 @@ export function TaskDetailsScreen({
                     )}
                     {subtask.completed && subtask.completed_at && (
                       <span className="subtask-completed-date">
-                        Completed: {new Date(subtask.completed_at).toLocaleDateString()}
+                        Completed:{" "}
+                        {new Date(subtask.completed_at).toLocaleDateString()}
                       </span>
                     )}
                     {subtask.completed_by && (
@@ -999,10 +1041,10 @@ export function TaskDetailsScreen({
                   <div className="task-info-content">
                     <span className="task-info-label">Assigned To</span>
                     <span className="task-info-value">
-                      {task.assigned_to === auth.currentUser?.uid 
-                        ? "You" 
-                        : getSubtaskAssignee(task.assigned_to) || "Unknown User"
-                      }
+                      {task.assigned_to === auth.currentUser?.uid
+                        ? "You"
+                        : getSubtaskAssignee(task.assigned_to) ||
+                          "Unknown User"}
                     </span>
                   </div>
                 </div>
@@ -1023,19 +1065,23 @@ export function TaskDetailsScreen({
                 <div className="task-info-item task-info-item-progress">
                   <div className="task-info-icon">
                     <div className="progress-indicator">
-                      <div 
-                        className="progress-circle" 
-                        style={{ 
-                          background: `conic-gradient(#78d957 ${calculateProgress() * 3.6}deg, rgba(51, 65, 85, 0.5) 0deg)` 
+                      <div
+                        className="progress-circle"
+                        style={{
+                          background: `conic-gradient(#78d957 ${calculateProgress() * 3.6}deg, rgba(51, 65, 85, 0.5) 0deg)`,
                         }}
                       >
-                        <span className="progress-text-small">{calculateProgress()}%</span>
+                        <span className="progress-text-small">
+                          {calculateProgress()}%
+                        </span>
                       </div>
                     </div>
                   </div>
                   <div className="task-info-content">
                     <span className="task-info-label">Progress</span>
-                    <span className="task-info-value">{calculateProgress()}% Complete</span>
+                    <span className="task-info-value">
+                      {calculateProgress()}% Complete
+                    </span>
                   </div>
                 </div>
               )}
@@ -1071,18 +1117,15 @@ export function TaskDetailsScreen({
               <HiTrash className="trash-animation" />
             </div>
             <h3>Delete Task</h3>
-            <p>Are you sure you want to delete this task? This action cannot be undone.</p>
+            <p>
+              Are you sure you want to delete this task? This action cannot be
+              undone.
+            </p>
             <div className="modal-actions">
-              <button
-                className="btn btn-cancel"
-                onClick={cancelDeleteTask}
-              >
+              <button className="btn btn-cancel" onClick={cancelDeleteTask}>
                 Cancel
               </button>
-              <button
-                className="btn btn-danger"
-                onClick={confirmDeleteTask}
-              >
+              <button className="btn btn-danger" onClick={confirmDeleteTask}>
                 Delete Task
               </button>
             </div>
@@ -1094,7 +1137,7 @@ export function TaskDetailsScreen({
       {notification.show && (
         <div className={`notification notification--${notification.type}`}>
           <div className="notification-content">
-            {notification.type === 'success' ? (
+            {notification.type === "success" ? (
               <HiCheckCircle className="notification-icon" />
             ) : (
               <HiExclamationCircle className="notification-icon" />
@@ -1109,12 +1152,18 @@ export function TaskDetailsScreen({
         isOpen={subtaskModalOpen}
         onClose={() => setSubtaskModalOpen(false)}
         onSuccess={handleSubtasksCreated}
-        existingCollaborators={task.collaborators?.map(id => ({
-          id,
-          name: profileData[id]?.username || profileData[id]?.email || collaboratorLabels?.find(label => label === id) || 'Unknown',
-          email: profileData[id]?.email || '',
-          role: 'collaborator'
-        })) || []}
+        existingCollaborators={
+          task.collaborators?.map((id) => ({
+            id,
+            name:
+              profileData[id]?.username ||
+              profileData[id]?.email ||
+              collaboratorLabels?.find((label) => label === id) ||
+              "Unknown",
+            email: profileData[id]?.email || "",
+            role: "collaborator",
+          })) || []
+        }
         taskDueDate={task.due_date}
       />
     </div>

@@ -19,6 +19,7 @@ type TaskDetailsModalProps = {
   onClose: () => void;
   onEdit: (task: Task) => void;
   onInviteCollaborator: () => void;
+  onDelete?: () => void;
 };
 
 export function TaskDetailsModal({
@@ -27,6 +28,7 @@ export function TaskDetailsModal({
   onClose,
   onEdit,
   onInviteCollaborator,
+  onDelete,
 }: TaskDetailsModalProps) {
   const navigate = useNavigate();
   const [collaboratorLabels, setCollaboratorLabels] = useState<string[] | null>(
@@ -198,6 +200,7 @@ export function TaskDetailsModal({
         collaboratorLabels={collaboratorLabels}
         onBack={onClose}
         onEdit={() => onEdit(task)}
+        onDelete={onDelete || (() => {})}
         onInviteCollaborator={onInviteCollaborator}
         onOpenComments={() => {
           navigate(`/tasks/${encodeURIComponent(task.id)}/comments`);

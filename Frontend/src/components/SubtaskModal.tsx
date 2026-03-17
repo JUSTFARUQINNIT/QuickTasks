@@ -6,7 +6,12 @@ type SubtaskModalProps = {
   isOpen: boolean;
   onClose: () => void;
   onSuccess: (subtasks: Subtask[]) => void;
-  existingCollaborators: Array<{ id: string; name: string; email: string; role?: string }>;
+  existingCollaborators: Array<{
+    id: string;
+    name: string;
+    email: string;
+    role?: string;
+  }>;
   taskDueDate?: string | null;
 };
 
@@ -18,12 +23,12 @@ type NewSubtask = {
   dueDate?: string;
 };
 
-export function SubtaskModal({ 
-  isOpen, 
-  onClose, 
-  onSuccess, 
+export function SubtaskModal({
+  isOpen,
+  onClose,
+  onSuccess,
   existingCollaborators,
-  taskDueDate 
+  taskDueDate,
 }: SubtaskModalProps) {
   const [subtasks, setSubtasks] = useState<NewSubtask[]>([]);
   const [newSubtaskText, setNewSubtaskText] = useState("");
@@ -39,9 +44,11 @@ export function SubtaskModal({
     if (selectedDueDate && taskDueDate) {
       const subtaskDate = new Date(selectedDueDate);
       const taskDate = new Date(taskDueDate);
-      
+
       if (subtaskDate > taskDate) {
-        alert(`Subtask due date cannot be after the task due date (${new Date(taskDueDate).toLocaleDateString()})`);
+        alert(
+          `Subtask due date cannot be after the task due date (${new Date(taskDueDate).toLocaleDateString()})`,
+        );
         return;
       }
     }
@@ -51,7 +58,7 @@ export function SubtaskModal({
       text: newSubtaskText.trim(),
       role: selectedRole,
       assignedTo: selectedCollaborator || undefined,
-      dueDate: selectedDueDate || undefined
+      dueDate: selectedDueDate || undefined,
     };
 
     setSubtasks([...subtasks, newSubtask]);
@@ -61,12 +68,12 @@ export function SubtaskModal({
   };
 
   const removeSubtask = (id: string) => {
-    setSubtasks(subtasks.filter(st => st.id !== id));
+    setSubtasks(subtasks.filter((st) => st.id !== id));
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (subtasks.length === 0) {
       alert("Please add at least one subtask.");
       return;
@@ -76,14 +83,14 @@ export function SubtaskModal({
 
     try {
       // Convert to Subtask format with role and due date
-      const formattedSubtasks: Subtask[] = subtasks.map(st => ({
+      const formattedSubtasks: Subtask[] = subtasks.map((st) => ({
         id: st.id,
         text: st.text,
         completed: false,
         assigned_to: st.assignedTo || null,
         role: st.role || "collaborator",
         due_date: st.dueDate || null,
-        created_at: new Date().toISOString()
+        created_at: new Date().toISOString(),
       }));
 
       onSuccess(formattedSubtasks);
@@ -106,8 +113,8 @@ export function SubtaskModal({
   };
 
   const getCollaboratorName = (id: string) => {
-    const collaborator = existingCollaborators.find(c => c.id === id);
-    return collaborator?.name || collaborator?.email || 'Unknown';
+    const collaborator = existingCollaborators.find((c) => c.id === id);
+    return collaborator?.name || collaborator?.email || "Unknown";
   };
 
   if (!isOpen) return null;
@@ -126,7 +133,7 @@ export function SubtaskModal({
           {/* Subtask Input */}
           <div className="form-section">
             <h3>Subtasks</h3>
-            
+
             <div className="subtask-add">
               <div className="form-row">
                 <div className="form-group">
@@ -137,10 +144,12 @@ export function SubtaskModal({
                     value={newSubtaskText}
                     onChange={(e) => setNewSubtaskText(e.target.value)}
                     placeholder="Enter subtask description"
-                    onKeyPress={(e) => e.key === "Enter" && (e.preventDefault(), addSubtask())}
+                    onKeyPress={(e) =>
+                      e.key === "Enter" && (e.preventDefault(), addSubtask())
+                    }
                   />
                 </div>
-                
+
                 <div className="form-group">
                   <label htmlFor="role">Role</label>
                   <input
@@ -151,7 +160,7 @@ export function SubtaskModal({
                     placeholder="Enter role (e.g., Developer, Designer, Tester)"
                   />
                 </div>
-                
+
                 <div className="form-group">
                   <label htmlFor="dueDate">Due Date</label>
                   <input
@@ -159,16 +168,27 @@ export function SubtaskModal({
                     type="date"
                     value={selectedDueDate}
                     onChange={(e) => setSelectedDueDate(e.target.value)}
-                    min={new Date().toISOString().split('T')[0]}
-                    max={taskDueDate ? new Date(taskDueDate).toISOString().split('T')[0] : undefined}
+                    min={new Date().toISOString().split("T")[0]}
+                    max={
+                      taskDueDate
+                        ? new Date(taskDueDate).toISOString().split("T")[0]
+                        : undefined
+                    }
                   />
                   {taskDueDate && (
-                    <small style={{ color: '#94a3b8', fontSize: '0.7rem', marginTop: '2px', display: 'block' }}>
+                    <small
+                      style={{
+                        color: "#94a3b8",
+                        fontSize: "0.7rem",
+                        marginTop: "2px",
+                        display: "block",
+                      }}
+                    >
                       Task due: {new Date(taskDueDate).toLocaleDateString()}
                     </small>
                   )}
                 </div>
-                
+
                 {existingCollaborators.length > 0 && (
                   <div className="form-group">
                     <label htmlFor="assignTo">Assign To</label>
@@ -180,14 +200,15 @@ export function SubtaskModal({
                       <option value="">Select collaborator...</option>
                       {existingCollaborators.map((collaborator) => (
                         <option key={collaborator.id} value={collaborator.id}>
-                          {collaborator.name} {collaborator.email && `(${collaborator.email})`}
+                          {collaborator.name}{" "}
+                          {collaborator.email && `(${collaborator.email})`}
                         </option>
                       ))}
                     </select>
                   </div>
                 )}
               </div>
-              
+
               <button
                 type="button"
                 className="add-subtask-btn"
@@ -240,8 +261,14 @@ export function SubtaskModal({
             <button type="button" className="btn-secondary" onClick={onClose}>
               Cancel
             </button>
-            <button type="submit" className="btn-primary" disabled={loading || subtasks.length === 0}>
-              {loading ? "Adding..." : `Add ${subtasks.length} Subtask${subtasks.length !== 1 ? 's' : ''}`}
+            <button
+              type="submit"
+              className="btn-primary"
+              disabled={loading || subtasks.length === 0}
+            >
+              {loading
+                ? "Adding..."
+                : `Add ${subtasks.length} Subtask${subtasks.length !== 1 ? "s" : ""}`}
             </button>
           </div>
         </form>

@@ -1,12 +1,18 @@
-import { HiArrowLeft, HiPencil } from "react-icons/hi2";
+import { HiArrowLeft, HiPencil, HiTrash } from "react-icons/hi2";
 
 type TaskHeaderProps = {
   isOwner: boolean;
   onBack: () => void;
   onEdit: () => void;
+  onDelete?: () => void;
 };
 
-export function TaskHeader({ isOwner, onBack, onEdit }: TaskHeaderProps) {
+export function TaskHeader({
+  isOwner,
+  onBack,
+  onEdit,
+  onDelete,
+}: TaskHeaderProps) {
   return (
     <header className="task-details-header">
       <button
@@ -23,15 +29,28 @@ export function TaskHeader({ isOwner, onBack, onEdit }: TaskHeaderProps) {
 
       <div className="task-details-header-actions">
         {isOwner && (
-          <button
-            type="button"
-            className="icon-button task-details-icon"
-            onClick={onEdit}
-            aria-label="Edit task"
-            style={{ fontSize: "16px" }}
-          >
-            <HiPencil />
-          </button>
+          <>
+            <button
+              type="button"
+              className="icon-button task-details-icon"
+              onClick={onEdit}
+              aria-label="Edit task"
+              style={{ fontSize: "16px" }}
+            >
+              <HiPencil />
+            </button>
+            {onDelete && (
+              <button
+                type="button"
+                className="icon-button task-details-icon"
+                onClick={onDelete}
+                aria-label="Delete task"
+                style={{ fontSize: "16px", color: "#ef4444" }}
+              >
+                <HiTrash />
+              </button>
+            )}
+          </>
         )}
       </div>
     </header>
