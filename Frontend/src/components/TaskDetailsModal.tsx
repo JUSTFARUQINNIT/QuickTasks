@@ -18,7 +18,6 @@ type TaskDetailsModalProps = {
   isOwner: boolean;
   onClose: () => void;
   onEdit: (task: Task) => void;
-  onDelete: (task: Task) => void;
   onInviteCollaborator: () => void;
 };
 
@@ -27,20 +26,16 @@ export function TaskDetailsModal({
   isOwner,
   onClose,
   onEdit,
-  onDelete,
   onInviteCollaborator,
 }: TaskDetailsModalProps) {
   const navigate = useNavigate();
   const [collaboratorLabels, setCollaboratorLabels] = useState<string[] | null>(
     null,
   );
-  const [collaboratorsLoading, setCollaboratorsLoading] = useState(false);
   const [ownerLabel, setOwnerLabel] = useState<string | null>(null);
   const [, setComments] = useState<
     { id: string; userLabel: string; text: string; createdAt: string }[]
   >([]);
-  const [aiLoading, setAiLoading] = useState(false);
-  const [aiSummary, setAiSummary] = useState<string | null>(null);
 
   const currentUserId = auth.currentUser?.uid ?? null;
   const isSelfCollaborator =
@@ -66,12 +61,10 @@ export function TaskDetailsModal({
       if (ids.length === 0) {
         if (isMounted) {
           setCollaboratorLabels([]);
-          setCollaboratorsLoading(false);
         }
         return;
       }
 
-      setCollaboratorsLoading(true);
       try {
         const labels: string[] = [];
         await Promise.all(
@@ -95,8 +88,8 @@ export function TaskDetailsModal({
         );
         if (!isMounted) return;
         setCollaboratorLabels(labels);
-      } finally {
-        if (isMounted) setCollaboratorsLoading(false);
+      } catch {
+        // ignore loading errors
       }
     }
 
@@ -191,78 +184,6 @@ export function TaskDetailsModal({
     return () => unsub();
   }, [task.id]);
 
-  async function handleLoadAiSuggestions() {
-    const user = auth.currentUser;
-    if (!user) {
-      alert("You must be signed in to get suggestions.");
-      return;
-    }
-    setAiLoading(true);
-    setAiSummary(null);
-    try {
-      const token = await user.getIdToken();
-      const apiBase = import.meta.env.VITE_API_BASE_URL;
-      const res = await fetch(
-        `${apiBase}/api/tasks/${encodeURIComponent(task.id)}/ai-suggestions`,
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        },
-      );
-      if (!res.ok) {
-        const body = (await res.json().catch(() => null)) as {
-          error?: string;
-        } | null;
-        throw new Error(body?.error ?? "Failed to load suggestions.");
-      }
-      const body = (await res.json()) as {
-        priority?: { priority: string; score: number; reason: string };
-        patterns?: {
-          recurrentSuggestions?: {
-            sampleTaskTitle?: string;
-            recurrence?: string;
-            confidence?: number;
-          }[];
-          deadlineSuggestion?: {
-            averageDaysToComplete?: number;
-            confidence?: number;
-          } | null;
-        };
-      };
-
-      const parts: string[] = [];
-      if (body.priority) {
-        parts.push(
-          `Suggested priority: ${body.priority.priority.toUpperCase()} (score ${body.priority.score}).`,
-        );
-      }
-      if (body.patterns?.deadlineSuggestion) {
-        const d = body.patterns.deadlineSuggestion;
-        parts.push(
-          `Average completion time: ~${d.averageDaysToComplete?.toFixed(
-            1,
-          )} days (confidence ${Math.round((d.confidence ?? 0) * 100)}%).`,
-        );
-      }
-      if (body.patterns?.recurrentSuggestions?.length) {
-        const first = body.patterns.recurrentSuggestions[0];
-        parts.push(
-          `Recurring pattern detected: ${first.recurrence} tasks like “${
-            first.sampleTaskTitle ?? "task"
-          }” (confidence ${Math.round((first.confidence ?? 0) * 100)}%).`,
-        );
-      }
-      setAiSummary(parts.join(" "));
-    } catch (err) {
-      const msg =
-        err instanceof Error ? err.message : "Could not load suggestions.";
-      alert(msg);
-    } finally {
-      setAiLoading(false);
-    }
-  }
-
   return (
     <div
       className="modal-overlay modal-overlay--fullscreen"
@@ -274,18 +195,13 @@ export function TaskDetailsModal({
         isOwner={isOwner}
         ownerLabel={ownerLabel}
         roleLabel={roleLabel}
-        collaboratorsLoading={collaboratorsLoading}
         collaboratorLabels={collaboratorLabels}
-        aiSummary={aiSummary}
-        aiLoading={aiLoading}
         onBack={onClose}
         onEdit={() => onEdit(task)}
-        onDelete={() => onDelete(task)}
         onInviteCollaborator={onInviteCollaborator}
         onOpenComments={() => {
           navigate(`/tasks/${encodeURIComponent(task.id)}/comments`);
         }}
-        onLoadAiSuggestions={handleLoadAiSuggestions}
       />
     </div>
   );

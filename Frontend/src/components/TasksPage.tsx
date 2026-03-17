@@ -39,7 +39,6 @@ import {
   doc,
   getDoc,
   getDocs,
-  onSnapshot,
   orderBy,
   query,
   serverTimestamp,
@@ -206,8 +205,8 @@ export function TasksPage({ mode = "both" }: TasksPageProps) {
 
     // Sort by order field, treating missing/invalid order as large number
     const sortedTasks = allTasks.sort((a, b) => {
-      const orderA = typeof a.data.order === "number" ? a.data.order : 999999;
-      const orderB = typeof b.data.order === "number" ? b.data.order : 999999;
+      const orderA = typeof (a.data as any).order === "number" ? (a.data as any).order : 999999;
+      const orderB = typeof (b.data as any).order === "number" ? (b.data as any).order : 999999;
       return orderA - orderB;
     });
 

@@ -469,6 +469,56 @@ export function TaskDetailsScreen({
     return subtask.assigned_to === currentUser.uid;
   };
 
+  const canCompleteTask = () => {
+    // Owner can always complete the task
+    if (isOwner) return true;
+    
+    // Assigned user can complete the task
+    if (task.assigned_to === auth.currentUser?.uid) return true;
+    
+    return false;
+  };
+
+  const toggleTaskComplete = async () => {
+    if (!canCompleteTask()) {
+      alert("You can only complete tasks assigned to you.");
+      return;
+    }
+
+    if (!auth.currentUser) return;
+
+    try {
+      const taskRef = doc(db, "tasks", task.id);
+      const isCompleting = !task.completed;
+      
+      const updateData: any = {
+        completed: isCompleting,
+        completed_at: isCompleting ? new Date().toISOString() : null,
+        completed_by: isCompleting && auth.currentUser ? auth.currentUser.uid : null
+      };
+
+      await updateDoc(taskRef, updateData);
+
+      // Create notification for task completion
+      if (isCompleting && task.ownerId && task.ownerId !== auth.currentUser.uid) {
+        await addDoc(collection(db, "notifications"), {
+          userId: task.ownerId,
+          taskId: task.id,
+          taskTitle: task.title,
+          completedBy: auth.currentUser.uid,
+          type: "task_completed",
+          message: `Task "${task.title}" has been completed`,
+          isRead: false,
+          createdAt: new Date().toISOString(),
+          createdBy: auth.currentUser.uid
+        });
+      }
+    } catch (error) {
+      console.error("Error updating task:", error);
+      alert("Failed to update task. Please try again.");
+    }
+  };
+
   const getSubtaskAssignee = (assignedTo: string | null | undefined) => {
     if (!assignedTo) return null;
     
@@ -490,9 +540,9 @@ export function TaskDetailsScreen({
     
     // Check collaborator labels
     if (collaboratorLabels) {
-      const collaboratorLabel = collaboratorLabels.find(label => label.id === assignedTo);
+      const collaboratorLabel = collaboratorLabels.find((label: any) => label.id === assignedTo);
       if (collaboratorLabel) {
-        return collaboratorLabel.name || collaboratorLabel.email || 'Unknown Collaborator';
+        return collaboratorLabel.name || (collaboratorLabel as any).email || 'Unknown Collaborator';
       }
     }
     
@@ -557,6 +607,16 @@ export function TaskDetailsScreen({
               <span className={`task-status ${getStatusClass()}`}>
                 {getStatusText()}
               </span>
+              {canCompleteTask() && (
+                <button
+                  className="task-complete-btn"
+                  onClick={toggleTaskComplete}
+                  title={task.completed ? "Mark as incomplete" : "Mark as complete"}
+                >
+                  <HiCheckCircle />
+                  {task.completed ? "Incomplete" : "Complete"}
+                </button>
+              )}
             </div>
           </section>
 
@@ -902,6 +962,21 @@ export function TaskDetailsScreen({
                   </span>
                 </div>
               </div>
+
+              {task.assigned_to && (
+                <div className="task-info-item">
+                  <HiUserPlus className="task-info-icon" />
+                  <div className="task-info-content">
+                    <span className="task-info-label">Assigned To</span>
+                    <span className="task-info-value">
+                      {task.assigned_to === auth.currentUser?.uid 
+                        ? "You" 
+                        : getSubtaskAssignee(task.assigned_to) || "Unknown User"
+                      }
+                    </span>
+                  </div>
+                </div>
+              )}
 
               <div className="task-info-item">
                 <HiCheckCircle className="task-info-icon" />

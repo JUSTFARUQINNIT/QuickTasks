@@ -2126,11 +2126,33 @@
   line-height: 1.2;
 }
 
-.task-details-header-meta {
+.task-complete-btn {
   display: flex;
   align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
+  gap: 6px;
+  padding: 6px 12px;
+  background: rgba(16, 185, 129, 0.1);
+  border: 1px solid rgba(16, 185, 129, 0.3);
+  border-radius: 20px;
+  color: #10b981;
+  font-size: 0.8rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.task-complete-btn:hover {
+  background: rgba(16, 185, 129, 0.2);
+  border-color: rgba(16, 185, 129, 0.5);
+  transform: translateY(-1px);
+}
+
+.task-complete-btn:active {
+  transform: translateY(0);
+}
+
+.task-complete-btn svg {
+  font-size: 14px;
 }
 
 .task-details-header-actions {
@@ -2480,7 +2502,10 @@
   border-radius: 4px;
   font-weight: 500;
 }
-
+.task-details-header-meta{
+  display: flex;
+  gap: 15px;
+}
 .progress-indicator {
   width: 40px;
   height: 40px;
@@ -3107,6 +3132,28 @@
   color: #f59e0b;
   border-radius: 4px;
   font-size: 0.7rem;
+  font-weight: 500;
+  margin-left: 8px;
+}
+
+.subtask-completed-date {
+  padding: 3px 6px;
+  background: rgba(16, 185, 129, 0.15);
+  color: #10b981;
+  border-radius: 4px;
+  font-size: 0.7rem;
+  font-weight: 500;
+  margin-left: 8px;
+}
+
+.subtask-completed-by {
+  color: #10b981;
+  font-size: 0.7rem;
+  font-style: italic;
+  margin-left: 8px;
+  padding: 3px 6px;
+  background: rgba(16, 185, 129, 0.1);
+  border-radius: 4px;
   font-weight: 500;
 }
 

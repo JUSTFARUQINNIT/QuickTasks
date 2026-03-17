@@ -7,7 +7,7 @@ import {
   useLocation,
   useNavigate,
 } from "react-router-dom";
-import { BrowserRouter } from "react-router-dom";
+// import { BrowserRouter } from "react-router-dom";
 import "./App.css";
 import { auth, db } from "./lib/firebaseClient";
 import type { User } from "firebase/auth";
