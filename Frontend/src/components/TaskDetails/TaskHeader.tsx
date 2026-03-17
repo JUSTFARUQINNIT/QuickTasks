@@ -1,4 +1,4 @@
-import { HiArrowLeft, HiPencil, HiTrash } from "react-icons/hi2";
+import { HiArrowLeft, HiPencil } from "react-icons/hi2";
 
 type TaskHeaderProps = {
   isOwner: boolean;
@@ -11,7 +11,7 @@ export function TaskHeader({
   isOwner,
   onBack,
   onEdit,
-  onDelete,
+  // onDelete,
 }: TaskHeaderProps) {
   return (
     <header className="task-details-header">
