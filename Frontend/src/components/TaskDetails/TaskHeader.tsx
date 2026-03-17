@@ -39,7 +39,7 @@ export function TaskHeader({
             >
               <HiPencil />
             </button>
-            {onDelete && (
+            {/* {onDelete && (
               <button
                 type="button"
                 className="icon-button task-details-icon"
@@ -49,7 +49,7 @@ export function TaskHeader({
               >
                 <HiTrash />
               </button>
-            )}
+            )} */}
           </>
         )}
       </div>
