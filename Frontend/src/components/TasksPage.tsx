@@ -93,15 +93,15 @@ export function TasksPage({ mode = "both" }: TasksPageProps) {
     const ownerQuery = query(tasksRef, where("user_id", "==", user.uid));
 
     // Collaborator tasks (legacy shared model): (collaborators array contains auth.uid)
-    const collaboratorQueryOrdered = query(
-      tasksRef,
-      where("collaborators", "array-contains", user.uid),
-      orderBy("order", "asc"),
-    );
-    const collaboratorQueryTempNoOrderBy = query(
-      tasksRef,
-      where("collaborators", "array-contains", user.uid),
-    );
+    // const collaboratorQueryOrdered = query(
+    //   tasksRef,
+    //   where("collaborators", "array-contains", user.uid),
+    //   orderBy("order", "asc"),
+    // );
+    // const collaboratorQueryTempNoOrderBy = query(
+    //   tasksRef,
+    //   where("collaborators", "array-contains", user.uid),
+    // );
 
     // Invited tasks (projection model): stored under userTasks/{userId}/tasks/{taskId}
     const invitedTasksQuery = collection(db, "userTasks", user.uid, "tasks");
@@ -727,41 +727,41 @@ export function TasksPage({ mode = "both" }: TasksPageProps) {
     }
   }
 
-  async function handleUpdate(task: Task, updates: Partial<Task>) {
-    try {
-      if (!navigator.onLine) {
-        // Offline queue currently only supports master tasks. For invited tasks we
-        // update local state only; the projection will be corrected on the next load.
-        if (!task.isInvited) {
-          enqueueOfflineAction({
-            type: "update",
-            payload: { id: task.id, updates },
-          });
-        }
-      } else if (task.isInvited) {
-        const user = auth.currentUser;
-        if (!user)
-          throw new Error("You must be signed in to update shared tasks.");
-        const invitedRef = doc(
-          collection(db, "userTasks", user.uid, "tasks"),
-          task.ref ?? task.id,
-        );
-        await updateDoc(invitedRef, {
-          completed: updates.completed,
-          completed_at: updates.completed_at,
-          updatedAt: serverTimestamp(),
-        });
-      } else {
-        const ref = doc(collection(db, "tasks"), task.id);
-        await updateDoc(ref, updates);
-      }
-    } catch (err) {
-      const message =
-        err instanceof Error ? err.message : "Could not update task.";
-      setError(message);
-      // reload tasks on next mount; for now we won’t roll back immediately
-    }
-  }
+  // async function handleUpdate(task: Task, updates: Partial<Task>) {
+  //   try {
+  //     if (!navigator.onLine) {
+  //       // Offline queue currently only supports master tasks. For invited tasks we
+  //       // update local state only; the projection will be corrected on the next load.
+  //       if (!task.isInvited) {
+  //         enqueueOfflineAction({
+  //           type: "update",
+  //           payload: { id: task.id, updates },
+  //         });
+  //       }
+  //     } else if (task.isInvited) {
+  //       const user = auth.currentUser;
+  //       if (!user)
+  //         throw new Error("You must be signed in to update shared tasks.");
+  //       const invitedRef = doc(
+  //         collection(db, "userTasks", user.uid, "tasks"),
+  //         task.ref ?? task.id,
+  //       );
+  //       await updateDoc(invitedRef, {
+  //         completed: updates.completed,
+  //         completed_at: updates.completed_at,
+  //         updatedAt: serverTimestamp(),
+  //       });
+  //     } else {
+  //       const ref = doc(collection(db, "tasks"), task.id);
+  //       await updateDoc(ref, updates);
+  //     }
+  //   } catch (err) {
+  //     const message =
+  //       err instanceof Error ? err.message : "Could not update task.";
+  //     setError(message);
+  //     // reload tasks on next mount; for now we won’t roll back immediately
+  //   }
+  // }
 
   async function handleDelete(task: Task) {
     const confirmed = window.confirm(
@@ -1090,7 +1090,7 @@ export function TasksPage({ mode = "both" }: TasksPageProps) {
                       const completedSubtasks = subtasks.filter(st => st.completed).length;
                       const totalSubtasks = subtasks.length;
                       const hasActiveProgress = totalSubtasks > 0 && completedSubtasks > 0;
-                      const progressPercentage = totalSubtasks > 0 ? (completedSubtasks / totalSubtasks) * 100 : 0;
+                      // const progressPercentage = totalSubtasks > 0 ? (completedSubtasks / totalSubtasks) * 100 : 0;
 
                       // Enhanced status calculation based on task completion, subtask progress, and due date
                       let statusLabel = "Pending";
@@ -1193,7 +1193,7 @@ export function TasksPage({ mode = "both" }: TasksPageProps) {
                       const completedSubtasks = subtasks.filter(st => st.completed).length;
                       const totalSubtasks = subtasks.length;
                       const hasActiveProgress = totalSubtasks > 0 && completedSubtasks > 0;
-                      const progressPercentage = totalSubtasks > 0 ? (completedSubtasks / totalSubtasks) * 100 : 0;
+                      // const progressPercentage = totalSubtasks > 0 ? (completedSubtasks / totalSubtasks) * 100 : 0;
 
                       // Enhanced status calculation based on task completion, subtask progress, and due date
                       let statusLabel = "Pending";
