@@ -760,34 +760,8 @@ export function TasksPage({ mode = "both" }: TasksPageProps) {
     }
   }
 
-  async function toggleCompleted(task: Task) {
-    const nextCompleted = !task.completed;
+  async function handleUpdate(task: Task, updates: Partial<Task>) {
     try {
-      setTasks((prev) =>
-        prev.map((t) =>
-          t.id === task.id
-            ? {
-                ...t,
-                completed: nextCompleted,
-                completed_at: nextCompleted ? new Date().toISOString() : null,
-              }
-            : t,
-        ),
-      );
-      setSelectedTask((prev) =>
-        prev && prev.id === task.id
-          ? {
-              ...prev,
-              completed: nextCompleted,
-              completed_at: nextCompleted ? new Date().toISOString() : null,
-            }
-          : prev,
-      );
-      const updates = {
-        completed: nextCompleted,
-        completed_at: nextCompleted ? new Date().toISOString() : null,
-      };
-
       if (!navigator.onLine) {
         // Offline queue currently only supports master tasks. For invited tasks we
         // update local state only; the projection will be corrected on the next load.
@@ -824,7 +798,7 @@ export function TasksPage({ mode = "both" }: TasksPageProps) {
 
   async function handleDelete(task: Task) {
     const confirmed = window.confirm(
-      "Are you sure you want to delete this task? This action cannot be undone.",
+      `Are you sure you want to delete "${task.title}"?`,
     );
     if (!confirmed) return;
 
@@ -1352,7 +1326,6 @@ export function TasksPage({ mode = "both" }: TasksPageProps) {
             startEdit(task);
             setSelectedTask(null);
           }}
-          onToggleComplete={(task: Task) => void toggleCompleted(task)}
           onDelete={(task: Task) => void handleDelete(task)}
           onInviteCollaborator={() => setShowInviteModal(true)}
         />

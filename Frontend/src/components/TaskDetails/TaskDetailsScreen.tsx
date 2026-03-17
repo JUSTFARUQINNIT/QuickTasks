@@ -542,7 +542,8 @@ export function TaskDetailsScreen({
     if (collaboratorLabels) {
       const collaboratorLabel = collaboratorLabels.find((label: any) => label.id === assignedTo);
       if (collaboratorLabel) {
-        return collaboratorLabel.name || (collaboratorLabel as any).email || 'Unknown Collaborator';
+        const labelData = collaboratorLabel as any;
+        return labelData.name || labelData.email || 'Unknown Collaborator';
       }
     }
     

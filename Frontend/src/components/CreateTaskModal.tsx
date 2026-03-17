@@ -167,7 +167,7 @@ export function CreateTaskModal({ isOpen, onClose, onSuccess }: CreateTaskModalP
       
       // Create projections for each collaborator
       for (const collaborator of collaborators) {
-        const userTasksRef = doc(db, "userTasks", collaborator.userId, "tasks", docRef.id);
+        const userTasksRef = collection(db, "userTasks", collaborator.userId, "tasks");
         await addDoc(userTasksRef, {
           ...taskData,
           id: docRef.id,

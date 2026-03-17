@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { HiXMark, HiPlus, HiUser, HiTrash } from "react-icons/hi2";
+import { HiXMark, HiPlus, HiTrash } from "react-icons/hi2";
 import type { Subtask } from "../types/tasks";
 
 type SubtaskModalProps = {
