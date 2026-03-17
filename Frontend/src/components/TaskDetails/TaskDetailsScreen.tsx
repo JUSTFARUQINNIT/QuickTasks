@@ -10,6 +10,7 @@ import {
   HiClock,
   HiUserCircle,
   HiCheckCircle,
+  HiExclamationCircle,
   HiUserPlus,
   HiShare,
   HiChatBubbleLeft,
@@ -33,6 +34,7 @@ import {
   addDoc,
   collection,
   onSnapshot,
+  deleteDoc,
 } from "firebase/firestore";
 import {
   getStorage as getFirebaseStorage,
@@ -46,16 +48,12 @@ type TaskDetailsScreenProps = {
   isOwner: boolean;
   ownerLabel: string | null;
   roleLabel: string | null;
-  // collaboratorsLoading: boolean;
   collaboratorLabels: string[] | null;
-  // aiSummary: string | null;
-  // aiLoading: boolean;
   onBack: () => void;
   onEdit: () => void;
-  // onDelete: () => void;
+  onDelete: () => void;
   onInviteCollaborator: () => void;
   onOpenComments: () => void;
-  // onLoadAiSuggestions: () => void;
 };
 
 export function TaskDetailsScreen({
@@ -63,16 +61,12 @@ export function TaskDetailsScreen({
   isOwner,
   ownerLabel,
   roleLabel,
-  // collaboratorsLoading,
   collaboratorLabels,
-  // aiSummary,
-  // aiLoading,
   onBack,
   onEdit,
   // onDelete,
   onInviteCollaborator,
   onOpenComments,
-  // onLoadAiSuggestions,
 }: TaskDetailsScreenProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
@@ -88,6 +82,76 @@ export function TaskDetailsScreen({
   const [profileData, setProfileData] = useState<{ [key: string]: any }>({});
   const [subtaskModalOpen, setSubtaskModalOpen] = useState(false);
   const [currentTask, setCurrentTask] = useState<Task>(task);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [notification, setNotification] = useState<{
+    type: 'success' | 'error';
+    message: string;
+    show: boolean;
+  }>({ type: 'success', message: '', show: false });
+
+  const handleDeleteTask = async () => {
+    if (!isOwner) {
+      showErrorNotification("Only the task owner can delete this task.");
+      return;
+    }
+
+    setShowDeleteModal(true);
+  };
+
+  const showSuccessNotification = (message: string) => {
+    setNotification({ type: 'success', message, show: true });
+    setTimeout(() => {
+      setNotification(prev => ({ ...prev, show: false }));
+    }, 3000);
+  };
+
+  const showErrorNotification = (message: string) => {
+    setNotification({ type: 'error', message, show: true });
+    setTimeout(() => {
+      setNotification(prev => ({ ...prev, show: false }));
+    }, 5000);
+  };
+
+  const confirmDeleteTask = async () => {
+    try {
+      const taskRef = doc(db, "tasks", task.id);
+      await deleteDoc(taskRef);
+      setShowDeleteModal(false);
+      showSuccessNotification("Task deleted successfully!");
+      onBack(); // Go back to task list after deletion
+    } catch (error) {
+      console.error("Error deleting task:", error);
+      showErrorNotification("Failed to delete task. Please try again.");
+    }
+  };
+
+  const cancelDeleteTask = () => {
+    setShowDeleteModal(false);
+  };
+
+  const deleteSubtask = async (subtaskId: string) => {
+    if (!isOwner) {
+      showErrorNotification("Only the task owner can delete subtasks.");
+      return;
+    }
+
+    if (!confirm("Are you sure you want to delete this subtask?")) return;
+
+    try {
+      const updatedSubtasks = subtasks.filter(st => st.id !== subtaskId);
+      const taskRef = doc(db, "tasks", task.id);
+      await updateDoc(taskRef, {
+        subtasks: updatedSubtasks
+      });
+
+      // Update local state
+      // setSubtasks(updatedSubtasks);
+      showSuccessNotification("Subtask deleted successfully!");
+    } catch (error) {
+      console.error("Error deleting subtask:", error);
+      showErrorNotification("Failed to delete subtask. Please try again.");
+    }
+  };
 
   // Real-time task listener
   useEffect(() => {
@@ -169,7 +233,7 @@ export function TaskDetailsScreen({
     // Owner can complete any subtask
     // Collaborators can ONLY complete subtasks explicitly assigned to them
     if (!isOwner && subtask.assigned_to !== currentUser.uid) {
-      alert("You can only complete subtasks assigned to you.");
+      showErrorNotification("You can only complete subtasks assigned to you.");
       return;
     }
 
@@ -208,7 +272,7 @@ export function TaskDetailsScreen({
       }
     } catch (error) {
       console.error("Error updating subtask:", error);
-      alert("Failed to update subtask. Please try again.");
+      showErrorNotification("Failed to update subtask. Please try again.");
     }
   };
 
@@ -228,7 +292,7 @@ export function TaskDetailsScreen({
       await createSubtaskNotifications(newSubtasks);
     } catch (error) {
       console.error("Error adding subtasks:", error);
-      alert("Failed to add subtasks. Please try again.");
+      showErrorNotification("Failed to add subtasks. Please try again.");
     }
   };
 
@@ -330,7 +394,7 @@ export function TaskDetailsScreen({
     const file = files[0];
     // Allow all task participants (owner and collaborators) to upload files
     if (!isOwner && !currentTask.collaborators?.includes(auth.currentUser?.uid || "")) {
-      alert("Only task participants can upload files.");
+      showErrorNotification("Only task participants can upload files.");
       return;
     }
 
@@ -370,7 +434,7 @@ export function TaskDetailsScreen({
       }
     } catch (error) {
       console.error("Error uploading file:", error);
-      alert("Failed to upload file. Please try again.");
+      showErrorNotification("Failed to upload file. Please try again.");
     } finally {
       setUploading(false);
     }
@@ -390,7 +454,7 @@ export function TaskDetailsScreen({
 
   const deleteFile = async (attachmentId: string) => {
     if (!isOwner) {
-      alert("Only the task owner can delete files.");
+      showErrorNotification("Only the task owner can delete files.");
       return;
     }
 
@@ -402,13 +466,13 @@ export function TaskDetailsScreen({
       await updateDoc(taskRef, { attachments: updatedAttachments });
     } catch (error) {
       console.error("Error deleting file:", error);
-      alert("Failed to delete file. Please try again.");
+      showErrorNotification("Failed to delete file. Please try again.");
     }
   };
 
   const updateFile = async (attachmentId: string, newFile: File) => {
     if (!isOwner) {
-      alert("Only the task owner can update files.");
+      showErrorNotification("Only the task owner can update files.");
       return;
     }
 
@@ -439,7 +503,7 @@ export function TaskDetailsScreen({
       await updateDoc(taskRef, { attachments: updatedAttachments });
     } catch (error) {
       console.error("Error updating file:", error);
-      alert("Failed to update file. Please try again.");
+      showErrorNotification("Failed to update file. Please try again.");
     }
   };
 
@@ -483,56 +547,6 @@ export function TaskDetailsScreen({
     
     // For regular subtasks without owner role, assigned collaborators can complete
     return subtask.assigned_to === currentUser.uid;
-  };
-
-  const canCompleteTask = () => {
-    // Owner can always complete the task
-    if (isOwner) return true;
-    
-    // Assigned user can complete the task
-    if (task.assigned_to === auth.currentUser?.uid) return true;
-    
-    return false;
-  };
-
-  const toggleTaskComplete = async () => {
-    if (!canCompleteTask()) {
-      alert("You can only complete tasks assigned to you.");
-      return;
-    }
-
-    if (!auth.currentUser) return;
-
-    try {
-      const taskRef = doc(db, "tasks", currentTask.id);
-      const isCompleting = !currentTask.completed;
-      
-      const updateData: any = {
-        completed: isCompleting,
-        completed_at: isCompleting ? new Date().toISOString() : null,
-        completed_by: isCompleting && auth.currentUser ? auth.currentUser.uid : null
-      };
-
-      await updateDoc(taskRef, updateData);
-
-      // Create notification for task completion
-      if (isCompleting && currentTask.ownerId && currentTask.ownerId !== auth.currentUser.uid) {
-        await addDoc(collection(db, "notifications"), {
-          userId: currentTask.ownerId,
-          taskId: currentTask.id,
-          taskTitle: currentTask.title,
-          completedBy: auth.currentUser.uid,
-          type: "task_completed",
-          message: `Task "${currentTask.title}" has been completed`,
-          isRead: false,
-          createdAt: new Date().toISOString(),
-          createdBy: auth.currentUser.uid
-        });
-      }
-    } catch (error) {
-      console.error("Error updating task:", error);
-      alert("Failed to update task. Please try again.");
-    }
   };
 
   const getSubtaskAssignee = (assignedTo: string | null | undefined) => {
@@ -591,7 +605,7 @@ export function TaskDetailsScreen({
 
   return (
     <div className="task-details-fullscreen">
-      <TaskHeader isOwner={isOwner} onBack={onBack} onEdit={onEdit} />
+      <TaskHeader isOwner={isOwner} onBack={onBack} onEdit={onEdit} onDelete={handleDeleteTask} />
 
       <div className="task-details-layout">
         <div className="task-details-main">
@@ -918,6 +932,15 @@ export function TaskDetailsScreen({
                         Completed by: {getSubtaskAssignee(subtask.completed_by)}
                       </span>
                     )}
+                    {isOwner && (
+                      <button
+                        className="subtask-delete-btn"
+                        onClick={() => deleteSubtask(subtask.id)}
+                        title="Delete subtask"
+                      >
+                        <HiTrash />
+                      </button>
+                    )}
                   </div>
                 ))
               )}
@@ -1039,6 +1062,47 @@ export function TaskDetailsScreen({
         onClose={closeProfileModal}
         profile={selectedProfile}
       />
+
+      {/* Delete Confirmation Modal */}
+      {showDeleteModal && (
+        <div className="modal-overlay">
+          <div className="modal-content delete-modal">
+            <div className="delete-modal-icon">
+              <HiTrash className="trash-animation" />
+            </div>
+            <h3>Delete Task</h3>
+            <p>Are you sure you want to delete this task? This action cannot be undone.</p>
+            <div className="modal-actions">
+              <button
+                className="btn btn-cancel"
+                onClick={cancelDeleteTask}
+              >
+                Cancel
+              </button>
+              <button
+                className="btn btn-danger"
+                onClick={confirmDeleteTask}
+              >
+                Delete Task
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Custom Notification */}
+      {notification.show && (
+        <div className={`notification notification--${notification.type}`}>
+          <div className="notification-content">
+            {notification.type === 'success' ? (
+              <HiCheckCircle className="notification-icon" />
+            ) : (
+              <HiExclamationCircle className="notification-icon" />
+            )}
+            <span className="notification-message">{notification.message}</span>
+          </div>
+        </div>
+      )}
 
       {/* Subtask Modal */}
       <SubtaskModal
