@@ -4,7 +4,6 @@ import { auth, db } from "../lib/firebaseClient";
 import {
   addDoc,
   collection,
-  // deleteDoc,
   doc,
   getDocs,
   orderBy,

@@ -3,14 +3,12 @@ import { HiXMark, HiPlus, HiUser, HiTrash } from "react-icons/hi2";
 import { auth, db } from "../lib/firebaseClient";
 import { 
   collection, 
-  // doc, 
   addDoc, 
   serverTimestamp,
   query, 
   where, 
   getDocs 
 } from "firebase/firestore";
-// import type { Subtasks } from "../types/tasks";
 
 type CreateTaskModalProps = {
   isOpen: boolean;
@@ -80,7 +78,7 @@ export function CreateTaskModal({ isOpen, onClose, onSuccess }: CreateTaskModalP
         setEmailError("User already added");
         return;
       }
-
+      
       const newCollaborator: CollaboratorRole = {
         userId: userData.uid,
         email: userData.email,

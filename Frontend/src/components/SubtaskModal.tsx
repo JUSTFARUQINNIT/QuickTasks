@@ -64,12 +64,6 @@ export function SubtaskModal({
     setSubtasks(subtasks.filter(st => st.id !== id));
   };
 
-  const updateSubtaskAssignment = (subtaskId: string, assignedTo: string) => {
-    setSubtasks(subtasks.map(st => 
-      st.id === subtaskId ? { ...st, assignedTo } : st
-    ));
-  };
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     

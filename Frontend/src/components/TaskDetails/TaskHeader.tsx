@@ -20,7 +20,6 @@ export function TaskHeader({ isOwner, onBack, onEdit }: TaskHeaderProps) {
       <div className="task-details-header-mai">
         <h2 className="task-details-title">Task Details</h2>
       </div>
-      {/* </div> */}
 
       <div className="task-details-header-actions">
         {isOwner && (
