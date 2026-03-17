@@ -11,7 +11,6 @@ export function TaskHeader({
   isOwner,
   onBack,
   onEdit,
-  // onDelete,
 }: TaskHeaderProps) {
   return (
     <header className="task-details-header">
@@ -39,17 +38,6 @@ export function TaskHeader({
             >
               <HiPencil />
             </button>
-            {/* {onDelete && (
-              <button
-                type="button"
-                className="icon-button task-details-icon"
-                onClick={onDelete}
-                aria-label="Delete task"
-                style={{ fontSize: "16px", color: "#ef4444" }}
-              >
-                <HiTrash />
-              </button>
-            )} */}
           </>
         )}
       </div>
