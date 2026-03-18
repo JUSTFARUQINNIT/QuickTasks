@@ -91,7 +91,7 @@ export function TasksPage({ mode = "both" }: TasksPageProps) {
 
     const tasksRef = collection(db, "tasks");
 
-    const ownerQuery = query(tasksRef, where("user_id", "==", user.uid));
+    const ownerQuery = query(tasksRef, where("ownerId", "==", user.uid));
 
     // Invited tasks (projection model): stored under userTasks/{userId}/tasks/{taskId}
     const invitedTasksQuery = collection(db, "userTasks", user.uid, "tasks");
@@ -279,7 +279,7 @@ export function TasksPage({ mode = "both" }: TasksPageProps) {
         // Process initial data
         const taskData: Task[] = fetchedTasks.map(({ id, data }) => {
           const ownerId =
-            typeof data.user_id === "string" ? (data.user_id as string) : null;
+            typeof data.ownerId === "string" ? (data.ownerId as string) : null;
           const isInvited = data.isInvited === true;
           return {
             id,
@@ -760,12 +760,12 @@ export function TasksPage({ mode = "both" }: TasksPageProps) {
         
         // Also delete from userTasks collections
         // 1. Delete from owner's userTasks
-        const ownerUserTaskRef = doc(db, "userTasks", task.user_id, "tasks", task.id);
+        const ownerUserTaskRef = doc(db, "userTasks", task.ownerId, "tasks", task.id);
         await deleteDoc(ownerUserTaskRef);
         
         // 2. Delete from current user's userTasks (if different from owner)
         const currentUser = auth.currentUser;
-        if (currentUser && currentUser.uid !== task.user_id) {
+        if (currentUser && currentUser.uid !== task.ownerId) {
           const currentUserUserTaskRef = doc(db, "userTasks", currentUser.uid, "tasks", task.id);
           await deleteDoc(currentUserUserTaskRef);
         }

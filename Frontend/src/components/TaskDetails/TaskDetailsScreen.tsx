@@ -121,12 +121,12 @@ export function TaskDetailsScreen({
       
       // Also delete from userTasks collections
       // 1. Delete from owner's userTasks
-      const ownerUserTaskRef = doc(db, "userTasks", task.user_id, "tasks", task.id);
+      const ownerUserTaskRef = doc(db, "userTasks", task.ownerId, "tasks", task.id);
       await deleteDoc(ownerUserTaskRef);
       
       // 2. Delete from current user's userTasks (if different from owner)
       const currentUser = auth.currentUser;
-      if (currentUser && currentUser.uid !== task.user_id) {
+      if (currentUser && currentUser.uid !== task.ownerId) {
         const currentUserUserTaskRef = doc(db, "userTasks", currentUser.uid, "tasks", task.id);
         await deleteDoc(currentUserUserTaskRef);
       }

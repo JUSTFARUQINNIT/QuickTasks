@@ -238,7 +238,7 @@ function DashboardOverview() {
         }
 
         // Fetch tasks exactly like TasksPage - both owned and invited
-        const ownerQuery = query(collection(db, "tasks"), where("user_id", "==", user.uid));
+        const ownerQuery = query(collection(db, "tasks"), where("ownerId", "==", user.uid));
         const invitedTasksQuery = collection(db, "userTasks", user.uid, "tasks");
 
         const [ownerSnap, invitedSnap] = await Promise.all([
