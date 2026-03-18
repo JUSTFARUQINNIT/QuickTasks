@@ -1034,6 +1034,23 @@
   border: 1px solid rgba(120, 217, 87, 0.8);
   padding: 12px 12px 10px;
   color: #e5e7eb;
+  transition: all 0.2s ease;
+}
+
+.stat-card--clickable {
+  cursor: pointer;
+}
+
+.stat-card--clickable:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(120, 217, 87, 0.3);
+  border-color: rgba(120, 217, 87, 1);
+}
+
+.stat-card--active {
+  background: rgba(120, 217, 87, 0.25);
+  border: 2px solid rgba(120, 217, 87, 1);
+  box-shadow: 0 0 0 3px rgba(120, 217, 87, 0.2);
 }
 
 .stat-label-row {

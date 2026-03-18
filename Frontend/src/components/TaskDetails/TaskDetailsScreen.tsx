@@ -115,7 +115,31 @@ export function TaskDetailsScreen({
   const confirmDeleteTask = async () => {
     try {
       const taskRef = doc(db, "tasks", task.id);
+      
+      // Delete master task
       await deleteDoc(taskRef);
+      
+      // Also delete from userTasks collections
+      // 1. Delete from owner's userTasks
+      const ownerUserTaskRef = doc(db, "userTasks", task.user_id, "tasks", task.id);
+      await deleteDoc(ownerUserTaskRef);
+      
+      // 2. Delete from current user's userTasks (if different from owner)
+      const currentUser = auth.currentUser;
+      if (currentUser && currentUser.uid !== task.user_id) {
+        const currentUserUserTaskRef = doc(db, "userTasks", currentUser.uid, "tasks", task.id);
+        await deleteDoc(currentUserUserTaskRef);
+      }
+      
+      // 3. Try to delete from collaborators' userTasks if we have access to that data
+      if (task.collaborators && Array.isArray(task.collaborators)) {
+        const deletePromises = task.collaborators.map((collaboratorId: string) => {
+          const collaboratorUserTaskRef = doc(db, "userTasks", collaboratorId, "tasks", task.id);
+          return deleteDoc(collaboratorUserTaskRef);
+        });
+        await Promise.all(deletePromises);
+      }
+      
       setShowDeleteModal(false);
       showSuccessNotification("Task deleted successfully!");
       onBack(); // Go back to task list after deletion

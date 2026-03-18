@@ -133,13 +133,18 @@ export function TasksPage({ mode = "both" }: TasksPageProps) {
             };
           }
         } catch (err) {
-          console.warn(
-            `Could not fetch master task ${masterId}, using invited data:`,
-            err,
-          );
+          // Handle permission errors gracefully - use invited data instead
+          if (err instanceof Error && err.message.includes('Missing or insufficient permissions')) {
+            console.log(`Permission denied for master task ${masterId}, using invited data`);
+          } else {
+            console.warn(
+              `Could not fetch master task ${masterId}, using invited data:`,
+              err,
+            );
+          }
         }
 
-        // Fallback to invited data if master fetch fails
+        // Fallback to invited data if master fetch fails (including permission errors)
         return {
           id: masterId,
           data: {
@@ -752,6 +757,27 @@ export function TasksPage({ mode = "both" }: TasksPageProps) {
       } else {
         const ref = doc(collection(db, "tasks"), task.id);
         await deleteDoc(ref);
+        
+        // Also delete from userTasks collections
+        // 1. Delete from owner's userTasks
+        const ownerUserTaskRef = doc(db, "userTasks", task.user_id, "tasks", task.id);
+        await deleteDoc(ownerUserTaskRef);
+        
+        // 2. Delete from current user's userTasks (if different from owner)
+        const currentUser = auth.currentUser;
+        if (currentUser && currentUser.uid !== task.user_id) {
+          const currentUserUserTaskRef = doc(db, "userTasks", currentUser.uid, "tasks", task.id);
+          await deleteDoc(currentUserUserTaskRef);
+        }
+        
+        // 3. Try to delete from collaborators' userTasks if we have access to that data
+        if (task.collaborators && Array.isArray(task.collaborators)) {
+          const deletePromises = task.collaborators.map((collaboratorId: string) => {
+            const collaboratorUserTaskRef = doc(db, "userTasks", collaboratorId, "tasks", task.id);
+            return deleteDoc(collaboratorUserTaskRef);
+          });
+          await Promise.all(deletePromises);
+        }
       }
     } catch (err) {
       const message =

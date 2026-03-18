@@ -237,36 +237,95 @@ function DashboardOverview() {
           return;
         }
 
-        const ownedQuery = query(
-          collection(db, "tasks"),
-          where("user_id", "==", user.uid),
-        );
-        const invitedQuery = collection(db, "userTasks", user.uid, "tasks");
+        // Fetch tasks exactly like TasksPage - both owned and invited
+        const ownerQuery = query(collection(db, "tasks"), where("user_id", "==", user.uid));
+        const invitedTasksQuery = collection(db, "userTasks", user.uid, "tasks");
 
-        const [ownedSnap, invitedSnap] = await Promise.all([
-          getDocs(ownedQuery),
-          getDocs(invitedQuery),
+        const [ownerSnap, invitedSnap] = await Promise.all([
+          getDocs(ownerQuery),
+          getDocs(invitedTasksQuery),
         ]);
         if (!isMounted) return;
 
-        const owned = ownedSnap.docs.map((d) => ({
-          id: d.id,
-          ...(d.data() as Omit<TaskSummary, "id">),
-        }));
-        const invited = invitedSnap.docs.map((d) => ({
-          id: d.id,
-          ...(d.data() as Omit<TaskSummary, "id">),
-        }));
+        // Process invited tasks exactly like TasksPage
+        const invitedTasks = await Promise.all(
+          invitedSnap.docs.map(async (invitedDoc) => {
+            const invitedData = invitedDoc.data();
+            const masterId = invitedDoc.id;
 
-        // Merge by ID so a task that the user both owns and has an invited projection for
-        // is only counted once.
-        const byId = new Map<string, TaskSummary>();
-        for (const t of owned as TaskSummary[]) byId.set(t.id, t);
-        for (const t of invited as TaskSummary[]) {
-          if (!byId.has(t.id)) byId.set(t.id, t);
-        }
+            // Try to fetch the master task to get complete data
+            try {
+              const masterDoc = await getDoc(doc(db, "tasks", masterId));
+              if (masterDoc.exists()) {
+                const masterData = masterDoc.data();
+                // Merge master data with invited data, ensuring all fields are present
+                return {
+                  id: masterId,
+                  ...masterData,
+                  // Ensure these fields are properly set for invited tasks
+                  isInvited: true,
+                  ref: masterId,
+                  // Ensure subtasks and attachments are included
+                  subtasks: masterData.subtasks || [],
+                  attachments: masterData.attachments || [],
+                  collaborators: masterData.collaborators || [],
+                  shared: masterData.shared || false,
+                  completed: masterData.completed || false,
+                  // Keep invited-specific fields
+                  invitedAt: invitedData.invitedAt,
+                  invitedBy: invitedData.invitedBy,
+                };
+              }
+            } catch (err) {
+              // Handle permission errors gracefully - use invited data instead
+              if (err instanceof Error && err.message.includes('Missing or insufficient permissions')) {
+                console.log(`Permission denied for master task ${masterId}, using invited data`);
+              } else {
+                console.warn(
+                  `Could not fetch master task ${masterId}, using invited data:`,
+                  err,
+                );
+              }
+            }
 
-        setTasks(Array.from(byId.values()));
+            // Fallback to invited data if master fetch fails (including permission errors)
+            return {
+              id: masterId,
+              ...invitedData,
+              isInvited: true,
+              ref: masterId,
+              // Ensure arrays are properly initialized
+              subtasks: invitedData.subtasks || [],
+              attachments: invitedData.attachments || [],
+              collaborators: invitedData.collaborators || [],
+              shared: invitedData.shared || false,
+              completed: invitedData.completed || false,
+            };
+          })
+        );
+
+        // Combine all task data exactly like TasksPage
+        const allTasks = [
+          ...ownerSnap.docs.map((doc) => ({ id: doc.id, ...doc.data() })),
+          ...invitedTasks,
+        ];
+
+        // Process tasks exactly like TasksPage to ensure consistency
+        const processedTasks = allTasks.map(({ id, ...data }) => {
+          const ownerId =
+            typeof (data as any).user_id === "string" ? (data.user_id as string) : null;
+          const isInvited = (data as any).isInvited === true;
+          return {
+            id,
+            ...(data as any),
+            shared: ownerId !== user.uid,
+            ownerId: ownerId,
+            isInvited,
+            ref: ((data as any).ref as string | undefined) ?? id,
+          };
+        });
+
+        setTasks(processedTasks);
       } catch (err) {
         const message =
           err instanceof Error
