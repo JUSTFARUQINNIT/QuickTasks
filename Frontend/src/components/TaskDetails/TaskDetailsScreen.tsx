@@ -1,5 +1,6 @@
 import { auth, db, storage } from "../../lib/firebaseClient";
 import type { Task } from "../../types/tasks";
+import { calculateTaskCompletion } from "../../utils/taskCompletion";
 import { TaskHeader } from "./TaskHeader";
 import { ProfileModal } from "./ProfileModal";
 import { SubtaskModal } from "../SubtaskModal";
@@ -121,12 +122,13 @@ export function TaskDetailsScreen({
       
       // Also delete from userTasks collections
       // 1. Delete from owner's userTasks
-      const ownerUserTaskRef = doc(db, "userTasks", task.ownerId, "tasks", task.id);
+      const ownerUserId = (task as any).user_id || task.ownerId;
+      const ownerUserTaskRef = doc(db, "userTasks", ownerUserId, "tasks", task.id);
       await deleteDoc(ownerUserTaskRef);
       
       // 2. Delete from current user's userTasks (if different from owner)
       const currentUser = auth.currentUser;
-      if (currentUser && currentUser.uid !== task.ownerId) {
+      if (currentUser && currentUser.uid !== ownerUserId) {
         const currentUserUserTaskRef = doc(db, "userTasks", currentUser.uid, "tasks", task.id);
         await deleteDoc(currentUserUserTaskRef);
       }
@@ -300,6 +302,9 @@ export function TaskDetailsScreen({
       if (isCompleting) {
         await createSubtaskCompletionNotification(subtask, currentUser);
       }
+
+      // Update task completion based on subtask progress
+      await updateTaskCompletionBasedOnSubtasks();
     } catch (error) {
       console.error("Error updating subtask:", error);
       showErrorNotification("Failed to update subtask. Please try again.");
@@ -320,6 +325,9 @@ export function TaskDetailsScreen({
 
       // Create notifications for assigned collaborators
       await createSubtaskNotifications(newSubtasks);
+
+      // Update task completion based on subtask progress (new subtasks might change completion status)
+      await updateTaskCompletionBasedOnSubtasks();
     } catch (error) {
       console.error("Error adding subtasks:", error);
       showErrorNotification("Failed to add subtasks. Please try again.");
@@ -572,6 +580,31 @@ export function TaskDetailsScreen({
     return Math.round((completedCount / subtasks.length) * 100);
   };
 
+  // Calculate task completion based on subtask progress
+  const getTaskCompletionStatus = () => {
+    return calculateTaskCompletion(currentTask);
+  };
+
+  // Update task completion based on subtask progress
+  const updateTaskCompletionBasedOnSubtasks = async () => {
+    const shouldBeCompleted = getTaskCompletionStatus();
+    const currentlyCompleted = currentTask.completed;
+    
+    // Only update if completion status should change
+    if (shouldBeCompleted !== currentlyCompleted) {
+      try {
+        const taskRef = doc(db, "tasks", task.id);
+        await updateDoc(taskRef, {
+          completed: shouldBeCompleted,
+          completed_at: shouldBeCompleted ? new Date().toISOString() : null,
+        });
+        console.log(`Task completion updated to ${shouldBeCompleted} based on subtask progress`);
+      } catch (error) {
+        console.error("Error updating task completion:", error);
+      }
+    }
+  };
+
   const canCompleteSubtask = (subtask: any) => {
     const currentUser = auth.currentUser;
     if (!currentUser) return false;
@@ -622,13 +655,41 @@ export function TaskDetailsScreen({
   };
 
   const getStatusClass = () => {
-    if (task.completed) return "task-status-completed";
-    return "task-status-in-process";
+    const isCompleted = getTaskCompletionStatus();
+    if (isCompleted) return "task-status-completed";
+    
+    // Check if overdue
+    if (task.due_date) {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const due = new Date(task.due_date);
+      due.setHours(0, 0, 0, 0);
+      if (due < today) return "task-status-overdue";
+    }
+    
+    // Check progress level
+    const progress = calculateProgress();
+    if (progress > 0) return "task-status-in-progress";
+    return "task-status-pending";
   };
 
   const getStatusText = () => {
-    if (task.completed) return "Completed";
-    return "In Process";
+    const isCompleted = getTaskCompletionStatus();
+    if (isCompleted) return "Completed";
+    
+    // Check if overdue
+    if (task.due_date) {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const due = new Date(task.due_date);
+      due.setHours(0, 0, 0, 0);
+      if (due < today) return "Overdue";
+    }
+    
+    // Check progress level
+    const progress = calculateProgress();
+    if (progress > 0) return `In Progress (${progress}%)`;
+    return "Pending";
   };
 
   const getPriorityClass = () => {
@@ -688,12 +749,27 @@ export function TaskDetailsScreen({
               </div>
             </div>
             <h1 className="task-details-title">{task.title}</h1>
+            <div className="task-details-status">
+              <span className={`task-status-badge ${getStatusClass()}`}>
+                {getStatusText()}
+              </span>
+              {subtasks.length > 0 && (
+                <div className="task-progress-info">
+                  <div className="task-progress-bar">
+                    <div 
+                      className="task-progress-fill" 
+                      style={{ width: `${calculateProgress()}%` }}
+                    />
+                  </div>
+                  <span className="task-progress-text">
+                    {subtasks.filter(st => st.completed).length} of {subtasks.length} subtasks completed
+                  </span>
+                </div>
+              )}
+            </div>
             <div className="task-details-header-meta">
               <span className={`task-pill ${getPriorityClass()}`}>
                 {task.priority?.toUpperCase() || "MEDIUM"}
-              </span>
-              <span className={`task-status ${getStatusClass()}`}>
-                {getStatusText()}
               </span>
             </div>
           </section>

@@ -20,7 +20,9 @@ import {
   query,
   setDoc,
   where,
+  Firestore,
 } from "firebase/firestore";
+import { calculateTaskCompletion } from "./utils/taskCompletion";
 import {
   Bar,
   BarChart,
@@ -57,6 +59,7 @@ type TaskSummary = {
   created_at: string;
   completed_at?: string | null;
   title?: string;
+  subtasks?: any[];
 };
 
 type TaskForReminder = TaskSummary & { title: string };
@@ -238,7 +241,44 @@ function DashboardOverview() {
         }
 
         // Fetch tasks exactly like TasksPage - both owned and invited
-        const ownerQuery = query(collection(db, "tasks"), where("ownerId", "==", user.uid));
+        const ownerQuery = query(collection(db, "tasks"), where("user_id", "==", user.uid));
+        
+        // Also query for tasks where user is a collaborator (to catch any tasks that might be structured differently)
+        let collaboratorResult;
+        try {
+          const collaboratorQuery = query(collection(db, "tasks"), where("collaborators", "array-contains", user.uid));
+          collaboratorResult = await getDocs(collaboratorQuery);
+        } catch (collabError) {
+          console.warn("Collaborator query failed, using fallback:", collabError);
+          collaboratorResult = { docs: [] }; // Empty fallback
+        }
+        
+        // Also query for shared tasks (alternative approach)
+        let sharedSnap;
+        try {
+          sharedSnap = await getDocs(query(collection(db, "tasks"), where("shared", "==", true)));
+        } catch (sharedError) {
+          console.warn("Shared query failed, using fallback:", sharedError);
+          
+          // Alternative approach: Get all owner tasks and filter for shared ones where user is in collaborators
+          try {
+            const allOwnerTasksQuery = query(collection(db, "tasks"), where("user_id", "==", user.uid));
+            const allOwnerTasks = await getDocs(allOwnerTasksQuery);
+            
+            // Filter for tasks that are shared or have collaborators
+            const sharedFromOwner = allOwnerTasks.docs.filter(doc => {
+              const data = doc.data();
+              return data.shared === true || (data.collaborators && Array.isArray(data.collaborators) && data.collaborators.includes(user.uid));
+            });
+            
+            sharedSnap = { docs: sharedFromOwner };
+            console.log("✅ Alternative shared query found tasks:", sharedFromOwner.length);
+          } catch (altError) {
+            console.warn("Alternative shared query also failed:", altError);
+            sharedSnap = { docs: [] }; // Empty fallback
+          }
+        }
+        
         const invitedTasksQuery = collection(db, "userTasks", user.uid, "tasks");
 
         const [ownerSnap, invitedSnap] = await Promise.all([
@@ -304,35 +344,109 @@ function DashboardOverview() {
           })
         );
 
+        // Process collaborator query results
+        const collaboratorTasks = collaboratorResult.docs.map((doc) => ({ 
+          id: doc.id, 
+          data: doc.data() as any
+        }));
+
+        // Process shared query results
+        const sharedTasks = sharedSnap.docs.map((doc) => ({ 
+          id: doc.id, 
+          data: doc.data() as any
+        }));
+
+        console.log("Dashboard query details:", {
+          ownerTasks: ownerSnap.docs.length,
+          collaboratorTasks: collaboratorResult.docs.length,
+          sharedTasks: sharedSnap.docs.length,
+          invitedTasks: invitedSnap.docs.length,
+          totalTasks: ownerSnap.docs.length + collaboratorResult.docs.length + sharedSnap.docs.length + invitedSnap.docs.length
+        });
+
+        // Debug: Show which queries found data
+        if (ownerSnap.docs.length > 0) {
+          console.log("✅ Owner query found tasks:", ownerSnap.docs.length);
+        }
+        if (collaboratorResult.docs.length > 0) {
+          console.log("✅ Collaborator query found tasks:", collaboratorResult.docs.length);
+        }
+        if (sharedSnap.docs.length > 0) {
+          console.log("✅ Shared query found tasks:", sharedSnap.docs.length);
+        }
+        if (invitedSnap.docs.length > 0) {
+          console.log("✅ Invited query found tasks:", invitedSnap.docs.length);
+        }
+
+        console.log("Dashboard query results:", {
+          ownerTasks: ownerSnap.docs.length,
+          collaboratorTasks: collaboratorResult.docs.length,
+          invitedTasks: invitedSnap.docs.length
+        });
+
         // Combine all task data exactly like TasksPage
         const allTasks = [
-          ...ownerSnap.docs.map((doc) => ({ id: doc.id, ...doc.data() })),
+          ...ownerSnap.docs.map((doc) => ({ id: doc.id, data: doc.data() })),
+          ...collaboratorTasks,
+          ...sharedTasks,
           ...invitedTasks,
         ];
 
+        // Debug: Log task structure
+        console.log("Task structure sample:", allTasks[0]);
+
+        // Remove duplicates (tasks might appear in multiple queries)
+        const uniqueTasks = allTasks.filter((task, index, self) => 
+          index === self.findIndex((t) => t.id === task.id)
+        );
+
+        // Utility function to safely extract user_id from task data
+        const getOwnerId = (data: any): string | null => {
+          if (!data) return null;
+          return data.user_id || data.ownerId || null;
+        };
+
         // Process tasks exactly like TasksPage to ensure consistency
-        const processedTasks = allTasks.map(({ id, ...data }) => {
-          const ownerId =
-            typeof (data as any).user_id === "string" ? (data.user_id as string) : null;
-          const isInvited = (data as any).isInvited === true;
-          return {
-            id,
-            ...(data as any),
-            shared: ownerId !== user.uid,
-            ownerId: ownerId,
-            isInvited,
-            ref: ((data as any).ref as string | undefined) ?? id,
-          };
-        });
+        const processedTasks = uniqueTasks.map((task: any) => {
+          try {
+            const { id, data } = task;
+            if (!data) {
+              console.warn("Task with undefined data:", task);
+              return null;
+            }
+            const ownerId = getOwnerId(data);
+            const isInvited = (data as any).isInvited === true;
+            return {
+              id,
+              ...data,
+              shared: ownerId !== user.uid,
+              ownerId: ownerId,
+              isInvited,
+              ref: ((data as any).ref as string | undefined) ?? id,
+            };
+          } catch (error) {
+            console.warn("Error processing task:", task, error);
+            return null;
+          }
+        }).filter(Boolean); // Remove null entries
 
         setTasks(processedTasks);
+        console.log("Dashboard loaded tasks:", processedTasks.length);
+        console.log("Completed tasks:", processedTasks.filter(t => calculateTaskCompletion(t)).length);
       } catch (err) {
+        console.error("Dashboard data loading error:", err);
+        console.error("Error details:", {
+          message: err.message,
+          code: (err as any).code,
+          stack: err.stack
+        });
         const message =
           err instanceof Error
             ? err.message
             : "Could not load dashboard stats.";
         if (!isMounted) return;
         setError(message);
+        console.log("Dashboard error set:", message);
       } finally {
         if (isMounted) setLoading(false);
       }
@@ -354,29 +468,37 @@ function DashboardOverview() {
   today.setHours(0, 0, 0, 0);
 
   const totalTasks = tasks.length;
-  const completedTasks = tasks.filter((t) => t.completed).length;
+  const completedTasks = tasks.filter((t) => calculateTaskCompletion(t)).length;
   const overdueTasks = tasks.filter((t) => {
-    if (t.completed || !t.due_date) return false;
+    if (calculateTaskCompletion(t) || !t.due_date) return false;
     const due = new Date(t.due_date);
     due.setHours(0, 0, 0, 0);
     return due < today;
   }).length;
-  const pendingTasks = tasks.filter((t) => !t.completed).length - overdueTasks;
+  const pendingTasks = tasks.filter((t) => !calculateTaskCompletion(t)).length - overdueTasks;
+
+  console.log("Dashboard stats:", { totalTasks, completedTasks, overdueTasks, pendingTasks });
+
+  // Ensure we have valid numbers even if data is loading
+  const displayTasks = Math.max(0, totalTasks);
+  const displayCompleted = Math.max(0, completedTasks);
+  const displayOverdue = Math.max(0, overdueTasks);
+  const displayPending = Math.max(0, pendingTasks);
 
   const weeklyData = useMemo(() => {
     const byWeek = new Map<string, number>();
 
     tasks.forEach((task) => {
-      if (!task.completed) return;
+      if (!calculateTaskCompletion(task)) return;
       const created = new Date(task.created_at);
       const year = created.getFullYear();
       const firstJan = new Date(year, 0, 1);
       const days = Math.floor(
-        (created.getTime() - firstJan.getTime()) / (24 * 60 * 60 * 1000),
+        (created.getTime() - firstJan.getTime()) / (1000 * 60 * 60 * 24),
       );
-      const week = Math.floor((days + firstJan.getDay()) / 7) + 1;
-      const key = `${year}-W${week.toString().padStart(2, "0")}`;
-      byWeek.set(key, (byWeek.get(key) ?? 0) + 1);
+      const week = Math.floor(days / 7);
+      const key = `${year}-W${week}`;
+      byWeek.set(key, (byWeek.get(key) || 0) + 1);
     });
 
     return Array.from(byWeek.entries())
@@ -397,7 +519,7 @@ function DashboardOverview() {
       const key = d.toISOString().slice(0, 10);
 
       const completedCount = tasks.filter((task) => {
-        if (!task.completed) return false;
+        if (!calculateTaskCompletion(task)) return false;
         const doneAt = task.completed_at ?? task.created_at;
         const doneKey = new Date(doneAt).toISOString().slice(0, 10);
         return doneKey === key;
@@ -417,7 +539,7 @@ function DashboardOverview() {
             <div className="stat-label">Total Tasks</div>
             <span className="stat-trend stat-trend--neutral">Live</span>
           </div>
-          <div className="stat-value">{loading ? "—" : totalTasks}</div>
+          <div className="stat-value">{loading ? "—" : displayTasks}</div>
           <div className="stat-meta">
             {loading ? "Loading your tasks…" : "All tasks in your workspace."}
           </div>
@@ -428,7 +550,7 @@ function DashboardOverview() {
             <div className="stat-label">Completed Tasks</div>
             <span className="stat-trend stat-trend--positive">↑</span>
           </div>
-          <div className="stat-value">{loading ? "—" : completedTasks}</div>
+          <div className="stat-value">{loading ? "—" : displayCompleted}</div>
           <div className="stat-meta">
             {loading
               ? "Checking off your wins…"
@@ -442,7 +564,7 @@ function DashboardOverview() {
             <span className="stat-trend stat-trend--neutral">→</span>
           </div>
           <div className="stat-value">
-            {loading ? "—" : Math.max(pendingTasks, 0)}
+            {loading ? "—" : Math.max(displayPending, 0)}
           </div>
           <div className="stat-meta">
             {loading
@@ -456,7 +578,7 @@ function DashboardOverview() {
             <div className="stat-label">Overdue Tasks</div>
             <span className="stat-trend stat-trend--negative">!</span>
           </div>
-          <div className="stat-value">{loading ? "—" : overdueTasks}</div>
+          <div className="stat-value">{loading ? "—" : displayOverdue}</div>
           <div className="stat-meta">
             {loading
               ? "Reviewing due dates…"

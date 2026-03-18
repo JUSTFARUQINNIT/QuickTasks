@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties, FormEvent, ReactNode } from "react";
 import { auth, db } from "../lib/firebaseClient";
 import type { Priority, Task } from "../types/tasks";
+import { calculateTaskCompletion } from "../utils/taskCompletion";
 import { TaskDetailsModal } from "./TaskDetailsModal";
 import { InviteCollaboratorModal } from "./InviteCollaboratorModal";
 import {
@@ -18,6 +19,7 @@ import {
   where,
   writeBatch,
   documentId,
+  Firestore,
 } from "firebase/firestore";
 
 // Suppress Firestore permission errors globally to prevent assertion failures
@@ -91,7 +93,25 @@ export function TasksPage({ mode = "both" }: TasksPageProps) {
 
     const tasksRef = collection(db, "tasks");
 
-    const ownerQuery = query(tasksRef, where("ownerId", "==", user.uid));
+    const ownerQuery = query(tasksRef, where("user_id", "==", user.uid));
+    
+    // Also query for tasks where user is a collaborator (to catch any tasks that might be structured differently)
+    let collaboratorSnap;
+    try {
+      collaboratorSnap = await getDocs(query(tasksRef, where("collaborators", "array-contains", user.uid)));
+    } catch (collabError) {
+      console.warn("Collaborator query failed, using fallback:", collabError);
+      collaboratorSnap = { docs: [] }; // Empty fallback
+    }
+    
+    // Also query for shared tasks (alternative approach)
+    let sharedSnap;
+    try {
+      sharedSnap = await getDocs(query(tasksRef, where("shared", "==", true)));
+    } catch (sharedError) {
+      console.warn("Shared query failed, using fallback:", sharedError);
+      sharedSnap = { docs: [] }; // Empty fallback
+    }
 
     // Invited tasks (projection model): stored under userTasks/{userId}/tasks/{taskId}
     const invitedTasksQuery = collection(db, "userTasks", user.uid, "tasks");
@@ -162,14 +182,41 @@ export function TasksPage({ mode = "both" }: TasksPageProps) {
       }),
     );
 
-    // Combine all task data
-    const allTasks = [
-      ...ownerSnap.docs.map((doc) => ({ id: doc.id, data: doc.data() })),
-      ...invitedTasks,
-    ];
+    // Process collaborator query results
+        const collaboratorTasks = collaboratorSnap.docs.map((doc) => ({ 
+          id: doc.id, 
+          data: doc.data()
+        }));
+
+        console.log("TasksPage query results:", {
+          ownerTasks: ownerSnap.docs.length,
+          collaboratorTasks: collaboratorSnap.docs.length,
+          sharedTasks: sharedSnap.docs.length,
+          invitedTasks: invitedSnap.docs.length,
+          totalTasks: ownerSnap.docs.length + collaboratorSnap.docs.length + sharedSnap.docs.length + invitedSnap.docs.length
+        });
+
+        // Process shared query results
+        const sharedTasks = sharedSnap.docs.map((doc) => ({ 
+          id: doc.id, 
+          data: doc.data()
+        }));
+
+        // Combine all task data
+        const allTasks = [
+          ...ownerSnap.docs.map((doc) => ({ id: doc.id, ...doc.data() })),
+          ...collaboratorTasks,
+          ...sharedTasks,
+          ...invitedTasks,
+        ];
+
+        // Remove duplicates (tasks might appear in multiple queries)
+        const uniqueTasks = allTasks.filter((task, index, self) => 
+          index === self.findIndex((t) => t.id === task.id)
+        );
 
     // Sort by order field, treating missing/invalid order as large number
-    const sortedTasks = allTasks.sort((a, b) => {
+    const sortedTasks = uniqueTasks.sort((a, b) => {
       const orderA =
         typeof (a.data as any).order === "number"
           ? (a.data as any).order
@@ -208,8 +255,10 @@ export function TasksPage({ mode = "both" }: TasksPageProps) {
   const sortedTasks = useMemo(
     () =>
       [...tasks].sort((a, b) => {
-        if (a.completed !== b.completed) {
-          return a.completed ? 1 : -1;
+        const aCompleted = calculateTaskCompletion(a);
+        const bCompleted = calculateTaskCompletion(b);
+        if (aCompleted !== bCompleted) {
+          return aCompleted ? 1 : -1;
         }
         // Primary ordering is user-controlled drag-and-drop order.
         const orderDiff = (a.order ?? 0) - (b.order ?? 0);
@@ -277,19 +326,29 @@ export function TasksPage({ mode = "both" }: TasksPageProps) {
         if (!isMounted) return;
 
         // Process initial data
-        const taskData: Task[] = fetchedTasks.map(({ id, data }) => {
-          const ownerId =
-            typeof data.ownerId === "string" ? (data.ownerId as string) : null;
-          const isInvited = data.isInvited === true;
-          return {
-            id,
-            ...(data as Omit<Task, "id">),
-            shared: ownerId !== user.uid,
-            ownerId: ownerId,
-            isInvited,
-            ref: (data.ref as string | undefined) ?? id,
-          };
-        });
+        const taskData: Task[] = fetchedTasks.map((task: any) => {
+          try {
+            const { id, data } = task;
+            if (!data) {
+              console.warn("Task with undefined data:", task);
+              return null;
+            }
+            const ownerId =
+              typeof data.user_id === "string" ? (data.user_id as string) : null;
+            const isInvited = data.isInvited === true;
+            return {
+              id,
+              ...(data as Omit<Task, "id">),
+              shared: ownerId !== user.uid,
+              ownerId: ownerId,
+              isInvited,
+              ref: (data.ref as string | undefined) ?? id,
+            };
+          } catch (error) {
+            console.warn("Error processing task:", task, error);
+            return null;
+          }
+        }).filter(Boolean); // Remove null entries
 
         // Set initial data
         setTasks(taskData);
@@ -760,12 +819,13 @@ export function TasksPage({ mode = "both" }: TasksPageProps) {
         
         // Also delete from userTasks collections
         // 1. Delete from owner's userTasks
-        const ownerUserTaskRef = doc(db, "userTasks", task.ownerId, "tasks", task.id);
+        const ownerUserId = (task as any).user_id || task.ownerId;
+        const ownerUserTaskRef = doc(db, "userTasks", ownerUserId, "tasks", task.id);
         await deleteDoc(ownerUserTaskRef);
         
         // 2. Delete from current user's userTasks (if different from owner)
         const currentUser = auth.currentUser;
-        if (currentUser && currentUser.uid !== task.ownerId) {
+        if (currentUser && currentUser.uid !== ownerUserId) {
           const currentUserUserTaskRef = doc(db, "userTasks", currentUser.uid, "tasks", task.id);
           await deleteDoc(currentUserUserTaskRef);
         }
@@ -901,8 +961,9 @@ export function TasksPage({ mode = "both" }: TasksPageProps) {
       if (!matchesSearch) return false;
 
       if (statusFilter !== "all") {
+        const isCompleted = calculateTaskCompletion(task);
         const isOverdue =
-          !task.completed &&
+          !isCompleted &&
           task.due_date !== null &&
           (() => {
             const due = new Date(task.due_date as string);
@@ -910,8 +971,8 @@ export function TasksPage({ mode = "both" }: TasksPageProps) {
             return due < today;
           })();
 
-        if (statusFilter === "completed" && !task.completed) return false;
-        if (statusFilter === "pending" && (task.completed || isOverdue))
+        if (statusFilter === "completed" && !isCompleted) return false;
+        if (statusFilter === "pending" && (isCompleted || isOverdue))
           return false;
         if (statusFilter === "overdue" && !isOverdue) return false;
       }
@@ -1097,8 +1158,9 @@ export function TasksPage({ mode = "both" }: TasksPageProps) {
                       
                       // Enhanced status calculation based on task completion, subtask progress, and due date
                       let statusLabel = "Pending";
+                      const isCompleted = calculateTaskCompletion(task);
 
-                      if (task.completed) {
+                      if (isCompleted) {
                         statusLabel = "Completed";
                       } else if (isOverdue) {
                         statusLabel = "Overdue";
@@ -1148,7 +1210,7 @@ export function TasksPage({ mode = "both" }: TasksPageProps) {
                           <td>
                             <span
                               className={`task-status task-status--${
-                                task.completed
+                                isCompleted
                                   ? "completed"
                                   : isOverdue
                                     ? "overdue"
@@ -1202,8 +1264,9 @@ export function TasksPage({ mode = "both" }: TasksPageProps) {
                       
                       // Enhanced status calculation based on task completion, subtask progress, and due date
                       let statusLabel = "Pending";
+                      const isCompleted = calculateTaskCompletion(task);
 
-                      if (task.completed) {
+                      if (isCompleted) {
                         statusLabel = "Completed";
                       } else if (isOverdue) {
                         statusLabel = "Overdue";
@@ -1220,7 +1283,7 @@ export function TasksPage({ mode = "both" }: TasksPageProps) {
                           key={task.id}
                           task={task}
                           disabled={!canReorder}
-                          className={`task-item ${task.completed ? "task-item--done" : ""}`}
+                          className={`task-item ${isCompleted ? "task-item--done" : ""}`}
                         >
                           <button
                             type="button"
