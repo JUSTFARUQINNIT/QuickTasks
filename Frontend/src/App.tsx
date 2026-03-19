@@ -12,6 +12,7 @@ import { auth, db } from "./lib/firebaseClient";
 import type { User } from "firebase/auth";
 import { onAuthStateChanged, signOut } from "firebase/auth";
 import { ErrorBoundary } from "./components/ErrorBoundary";
+import type { Task } from "./types/tasks";
 import {
   collection,
   doc,
@@ -20,7 +21,7 @@ import {
   query,
   setDoc,
   where,
-  Firestore,
+  // Firestore,
 } from "firebase/firestore";
 import { calculateTaskCompletion } from "./utils/taskCompletion";
 import {
@@ -253,26 +254,33 @@ function DashboardOverview() {
           collaboratorResult = { docs: [] }; // Empty fallback
         }
         
-        // Also query for shared tasks (alternative approach)
+        // Also query for shared tasks where user is a collaborator (accepted invitations)
         let sharedSnap;
         try {
-          sharedSnap = await getDocs(query(collection(db, "tasks"), where("shared", "==", true)));
+          // First try to get tasks where user is explicitly in collaborators array
+          const collaboratorSharedQuery = query(collection(db, "tasks"), 
+            where("shared", "==", true),
+            where("collaborators", "array-contains", user.uid)
+          );
+          sharedSnap = await getDocs(collaboratorSharedQuery);
         } catch (sharedError) {
           console.warn("Shared query failed, using fallback:", sharedError);
           
-          // Alternative approach: Get all owner tasks and filter for shared ones where user is in collaborators
+          // Alternative approach: Get all shared tasks and filter for ones where user is in collaborators
           try {
-            const allOwnerTasksQuery = query(collection(db, "tasks"), where("user_id", "==", user.uid));
-            const allOwnerTasks = await getDocs(allOwnerTasksQuery);
+            const allSharedTasksQuery = query(collection(db, "tasks"), where("shared", "==", true));
+            const allSharedTasks = await getDocs(allSharedTasksQuery);
             
-            // Filter for tasks that are shared or have collaborators
-            const sharedFromOwner = allOwnerTasks.docs.filter(doc => {
+            // Filter for shared tasks where user is explicitly in collaborators
+            const sharedWithUser = allSharedTasks.docs.filter(doc => {
               const data = doc.data();
-              return data.shared === true || (data.collaborators && Array.isArray(data.collaborators) && data.collaborators.includes(user.uid));
+              return data.collaborators && 
+                     Array.isArray(data.collaborators) && 
+                     data.collaborators.includes(user.uid);
             });
             
-            sharedSnap = { docs: sharedFromOwner };
-            console.log("✅ Alternative shared query found tasks:", sharedFromOwner.length);
+            sharedSnap = { docs: sharedWithUser };
+            console.log("✅ Alternative shared query found tasks where user is collaborator:", sharedWithUser.length);
           } catch (altError) {
             console.warn("Alternative shared query also failed:", altError);
             sharedSnap = { docs: [] }; // Empty fallback
@@ -301,19 +309,21 @@ function DashboardOverview() {
                 // Merge master data with invited data, ensuring all fields are present
                 return {
                   id: masterId,
-                  ...masterData,
-                  // Ensure these fields are properly set for invited tasks
-                  isInvited: true,
-                  ref: masterId,
-                  // Ensure subtasks and attachments are included
-                  subtasks: masterData.subtasks || [],
-                  attachments: masterData.attachments || [],
-                  collaborators: masterData.collaborators || [],
-                  shared: masterData.shared || false,
-                  completed: masterData.completed || false,
-                  // Keep invited-specific fields
-                  invitedAt: invitedData.invitedAt,
-                  invitedBy: invitedData.invitedBy,
+                  data: {
+                    ...masterData,
+                    // Ensure these fields are properly set for invited tasks
+                    isInvited: true,
+                    ref: masterId,
+                    // Ensure subtasks and attachments are included
+                    subtasks: masterData.subtasks || [],
+                    attachments: masterData.attachments || [],
+                    collaborators: masterData.collaborators || [],
+                    shared: masterData.shared || false,
+                    completed: masterData.completed || false,
+                    // Keep invited-specific fields
+                    invitedAt: invitedData.invitedAt,
+                    invitedBy: invitedData.invitedBy,
+                  }
                 };
               }
             } catch (err) {
@@ -331,15 +341,17 @@ function DashboardOverview() {
             // Fallback to invited data if master fetch fails (including permission errors)
             return {
               id: masterId,
-              ...invitedData,
-              isInvited: true,
-              ref: masterId,
-              // Ensure arrays are properly initialized
-              subtasks: invitedData.subtasks || [],
-              attachments: invitedData.attachments || [],
-              collaborators: invitedData.collaborators || [],
-              shared: invitedData.shared || false,
-              completed: invitedData.completed || false,
+              data: {
+                ...invitedData,
+                isInvited: true,
+                ref: masterId,
+                // Ensure arrays are properly initialized
+                subtasks: invitedData.subtasks || [],
+                attachments: invitedData.attachments || [],
+                collaborators: invitedData.collaborators || [],
+                shared: invitedData.shared || false,
+                completed: invitedData.completed || false,
+              }
             };
           })
         );
@@ -384,7 +396,7 @@ function DashboardOverview() {
           invitedTasks: invitedSnap.docs.length
         });
 
-        // Combine all task data exactly like TasksPage
+        // Combine all task data exactly like TasksPage - ensure consistent { id, data } structure
         const allTasks = [
           ...ownerSnap.docs.map((doc) => ({ id: doc.id, data: doc.data() })),
           ...collaboratorTasks,
@@ -407,38 +419,42 @@ function DashboardOverview() {
         };
 
         // Process tasks exactly like TasksPage to ensure consistency
-        const processedTasks = uniqueTasks.map((task: any) => {
-          try {
-            const { id, data } = task;
-            if (!data) {
-              console.warn("Task with undefined data:", task);
+        const processedTasks = uniqueTasks
+          .map((task: any): Task | null => {
+            try {
+              const { id, data } = task;
+              if (!data) {
+                console.warn("Task with undefined data:", task);
+                return null;
+              }
+              const ownerId = getOwnerId(data);
+              const isInvited = (data as any).isInvited === true;
+              return {
+                id,
+                ...data,
+                shared: ownerId !== user.uid,
+                ownerId: ownerId,
+                isInvited,
+                ref: ((data as any).ref as string | undefined) ?? id,
+              };
+            } catch (error) {
+              console.warn("Error processing task:", task, error);
               return null;
             }
-            const ownerId = getOwnerId(data);
-            const isInvited = (data as any).isInvited === true;
-            return {
-              id,
-              ...data,
-              shared: ownerId !== user.uid,
-              ownerId: ownerId,
-              isInvited,
-              ref: ((data as any).ref as string | undefined) ?? id,
-            };
-          } catch (error) {
-            console.warn("Error processing task:", task, error);
-            return null;
-          }
-        }).filter(Boolean); // Remove null entries
+          })
+          .filter((t): t is Task => t !== null);
 
         setTasks(processedTasks);
         console.log("Dashboard loaded tasks:", processedTasks.length);
         console.log("Completed tasks:", processedTasks.filter(t => calculateTaskCompletion(t)).length);
       } catch (err) {
         console.error("Dashboard data loading error:", err);
+        const errorMessage =
+          err instanceof Error ? err.message : typeof err === "string" ? err : "";
         console.error("Error details:", {
-          message: err.message,
-          code: (err as any).code,
-          stack: err.stack
+          message: errorMessage,
+          code: (err as any)?.code,
+          stack: err instanceof Error ? err.stack : undefined,
         });
         const message =
           err instanceof Error

@@ -5,10 +5,10 @@ import type { Priority, Task } from "../types/tasks";
 import { calculateTaskCompletion } from "../utils/taskCompletion";
 import { TaskDetailsModal } from "./TaskDetailsModal";
 import { InviteCollaboratorModal } from "./InviteCollaboratorModal";
+import { deleteTask as apiDeleteTask } from "../api/tasks";
 import {
   addDoc,
   collection,
-  deleteDoc,
   doc,
   getDoc,
   getDocs,
@@ -19,7 +19,6 @@ import {
   where,
   writeBatch,
   documentId,
-  Firestore,
 } from "firebase/firestore";
 
 // Suppress Firestore permission errors globally to prevent assertion failures
@@ -104,13 +103,37 @@ export function TasksPage({ mode = "both" }: TasksPageProps) {
       collaboratorSnap = { docs: [] }; // Empty fallback
     }
     
-    // Also query for shared tasks (alternative approach)
+    // Also query for shared tasks where user is a collaborator (accepted invitations)
     let sharedSnap;
     try {
-      sharedSnap = await getDocs(query(tasksRef, where("shared", "==", true)));
+      // First try to get tasks where user is explicitly in collaborators array
+      const collaboratorSharedQuery = query(tasksRef, 
+        where("shared", "==", true),
+        where("collaborators", "array-contains", user.uid)
+      );
+      sharedSnap = await getDocs(collaboratorSharedQuery);
     } catch (sharedError) {
       console.warn("Shared query failed, using fallback:", sharedError);
-      sharedSnap = { docs: [] }; // Empty fallback
+      
+      // Alternative approach: Get all shared tasks and filter for ones where user is in collaborators
+      try {
+        const allSharedTasksQuery = query(tasksRef, where("shared", "==", true));
+        const allSharedTasks = await getDocs(allSharedTasksQuery);
+        
+        // Filter for shared tasks where user is explicitly in collaborators
+        const sharedWithUser = allSharedTasks.docs.filter(doc => {
+          const data = doc.data();
+          return data.collaborators && 
+                 Array.isArray(data.collaborators) && 
+                 data.collaborators.includes(user.uid);
+        });
+        
+        sharedSnap = { docs: sharedWithUser };
+        console.log("✅ Alternative shared query found tasks where user is collaborator:", sharedWithUser.length);
+      } catch (altError) {
+        console.warn("Alternative shared query also failed:", altError);
+        sharedSnap = { docs: [] }; // Empty fallback
+      }
     }
 
     // Invited tasks (projection model): stored under userTasks/{userId}/tasks/{taskId}
@@ -202,9 +225,9 @@ export function TasksPage({ mode = "both" }: TasksPageProps) {
           data: doc.data()
         }));
 
-        // Combine all task data
+        // Combine all task data - ensure consistent { id, data } structure
         const allTasks = [
-          ...ownerSnap.docs.map((doc) => ({ id: doc.id, ...doc.data() })),
+          ...ownerSnap.docs.map((doc) => ({ id: doc.id, data: doc.data() })),
           ...collaboratorTasks,
           ...sharedTasks,
           ...invitedTasks,
@@ -326,7 +349,8 @@ export function TasksPage({ mode = "both" }: TasksPageProps) {
         if (!isMounted) return;
 
         // Process initial data
-        const taskData: Task[] = fetchedTasks.map((task: any) => {
+        const taskData = fetchedTasks
+          .map((task: any): Task | null => {
           try {
             const { id, data } = task;
             if (!data) {
@@ -348,7 +372,8 @@ export function TasksPage({ mode = "both" }: TasksPageProps) {
             console.warn("Error processing task:", task, error);
             return null;
           }
-        }).filter(Boolean); // Remove null entries
+          })
+          .filter((t): t is Task => t !== null);
 
         // Set initial data
         setTasks(taskData);
@@ -466,15 +491,37 @@ export function TasksPage({ mode = "both" }: TasksPageProps) {
       invitedTaskUnsubscribeRef.current = null;
     }
 
-    // Temporarily disable the listener to prevent assertion errors
-    // TODO: Implement a safer approach for real-time updates
     if (!current || !current.isInvited || !user) {
       return;
     }
 
-    console.log(
-      "Real-time listener temporarily disabled for shared tasks to prevent assertion errors",
-    );
+    const masterId = (current.ref as string | undefined) ?? current.id;
+    const masterRef = doc(db, "tasks", masterId);
+
+    try {
+      invitedTaskUnsubscribeRef.current = onSnapshot(
+        masterRef,
+        (snap) => {
+          if (!snap.exists()) {
+            return;
+          }
+          const data = snap.data() as Omit<Task, "id">;
+          setSelectedTask((prev) =>
+            prev && prev.id === current.id
+              ? {
+                  ...prev,
+                  ...data,
+                }
+              : prev,
+          );
+        },
+        (error) => {
+          console.error("Error listening to invited master task:", error);
+        },
+      );
+    } catch (err) {
+      console.error("Failed to attach invited master task listener:", err);
+    }
 
     return () => {
       if (invitedTaskUnsubscribeRef.current) {
@@ -543,8 +590,7 @@ export function TasksPage({ mode = "both" }: TasksPageProps) {
           await updateDoc(ref, item.payload.updates);
         } else if (item.type === "delete") {
           const docId = idMap.get(item.payload.id) ?? item.payload.id;
-          const ref = doc(collection(db, "tasks"), docId);
-          await deleteDoc(ref);
+          await apiDeleteTask(docId);
         } else if (item.type === "reorder") {
           const batch = writeBatch(db);
           for (const entry of item.payload.orders) {
@@ -803,41 +849,24 @@ export function TasksPage({ mode = "both" }: TasksPageProps) {
   }
 
   async function handleDelete(task: Task) {
-    const confirmed = window.confirm(
-      `Are you sure you want to delete "${task.title}"?`,
-    );
-    if (!confirmed) return;
-
     try {
+      const currentUser = auth.currentUser;
+      const ownerUserId = (task as any).user_id || task.ownerId;
+      const isOwner = !!currentUser && ownerUserId === currentUser.uid;
+      if (!isOwner) {
+        throw new Error("Only the task owner can delete this task.");
+      }
+
+      const deleteId = (task.ref ?? task.id) as string;
+
+      // Optimistically update UI
       setTasks((prev) => prev.filter((t) => t.id !== task.id));
       setSelectedTask((prev) => (prev && prev.id === task.id ? null : prev));
+      
       if (!navigator.onLine) {
-        enqueueOfflineAction({ type: "delete", payload: { id: task.id } });
+        enqueueOfflineAction({ type: "delete", payload: { id: deleteId } });
       } else {
-        const ref = doc(collection(db, "tasks"), task.id);
-        await deleteDoc(ref);
-        
-        // Also delete from userTasks collections
-        // 1. Delete from owner's userTasks
-        const ownerUserId = (task as any).user_id || task.ownerId;
-        const ownerUserTaskRef = doc(db, "userTasks", ownerUserId, "tasks", task.id);
-        await deleteDoc(ownerUserTaskRef);
-        
-        // 2. Delete from current user's userTasks (if different from owner)
-        const currentUser = auth.currentUser;
-        if (currentUser && currentUser.uid !== ownerUserId) {
-          const currentUserUserTaskRef = doc(db, "userTasks", currentUser.uid, "tasks", task.id);
-          await deleteDoc(currentUserUserTaskRef);
-        }
-        
-        // 3. Try to delete from collaborators' userTasks if we have access to that data
-        if (task.collaborators && Array.isArray(task.collaborators)) {
-          const deletePromises = task.collaborators.map((collaboratorId: string) => {
-            const collaboratorUserTaskRef = doc(db, "userTasks", collaboratorId, "tasks", task.id);
-            return deleteDoc(collaboratorUserTaskRef);
-          });
-          await Promise.all(deletePromises);
-        }
+        await apiDeleteTask(deleteId);
       }
     } catch (err) {
       const message =

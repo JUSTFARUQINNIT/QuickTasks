@@ -1,4 +1,4 @@
-import type { Task, Subtask } from "../types/tasks";
+import type { Task } from "../types/tasks";
 
 // Define a base type that works with both Task and TaskSummary
 type BaseTask = {

@@ -8,7 +8,6 @@ import { useState, useRef, useEffect } from "react";
 import {
   doc,
   updateDoc,
-  deleteDoc,
   arrayUnion,
   getDoc,
   addDoc,
@@ -84,6 +83,7 @@ export function TaskDetailsScreen({
   const [subtaskModalOpen, setSubtaskModalOpen] = useState(false);
   const [currentTask, setCurrentTask] = useState<Task>(task);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [subtaskToDeleteId, setSubtaskToDeleteId] = useState<string | null>(null);
   const [notification, setNotification] = useState<{
     type: "success" | "error";
     message: string;
@@ -115,33 +115,7 @@ export function TaskDetailsScreen({
 
   const confirmDeleteTask = async () => {
     try {
-      const taskRef = doc(db, "tasks", task.id);
-      
-      // Delete master task
-      await deleteDoc(taskRef);
-      
-      // Also delete from userTasks collections
-      // 1. Delete from owner's userTasks
-      const ownerUserId = (task as any).user_id || task.ownerId;
-      const ownerUserTaskRef = doc(db, "userTasks", ownerUserId, "tasks", task.id);
-      await deleteDoc(ownerUserTaskRef);
-      
-      // 2. Delete from current user's userTasks (if different from owner)
-      const currentUser = auth.currentUser;
-      if (currentUser && currentUser.uid !== ownerUserId) {
-        const currentUserUserTaskRef = doc(db, "userTasks", currentUser.uid, "tasks", task.id);
-        await deleteDoc(currentUserUserTaskRef);
-      }
-      
-      // 3. Try to delete from collaborators' userTasks if we have access to that data
-      if (task.collaborators && Array.isArray(task.collaborators)) {
-        const deletePromises = task.collaborators.map((collaboratorId: string) => {
-          const collaboratorUserTaskRef = doc(db, "userTasks", collaboratorId, "tasks", task.id);
-          return deleteDoc(collaboratorUserTaskRef);
-        });
-        await Promise.all(deletePromises);
-      }
-      
+      await onDelete?.();
       setShowDeleteModal(false);
       showSuccessNotification("Task deleted successfully!");
       onBack(); // Go back to task list after deletion
@@ -155,27 +129,32 @@ export function TaskDetailsScreen({
     setShowDeleteModal(false);
   };
 
-  const deleteSubtask = async (subtaskId: string) => {
+  const requestDeleteSubtask = (subtaskId: string) => {
     if (!isOwner) {
       showErrorNotification("Only the task owner can delete subtasks.");
       return;
     }
+    setSubtaskToDeleteId(subtaskId);
+  };
 
-    if (!confirm("Are you sure you want to delete this subtask?")) return;
-
+  const confirmDeleteSubtask = async () => {
+    if (!subtaskToDeleteId) return;
     try {
-      const updatedSubtasks = subtasks.filter((st) => st.id !== subtaskId);
+      const updatedSubtasks = subtasks.filter((st) => st.id !== subtaskToDeleteId);
       const taskRef = doc(db, "tasks", task.id);
       await updateDoc(taskRef, {
         subtasks: updatedSubtasks,
       });
-
-      // Update local state - subtasks will update automatically via real-time listener
+      setSubtaskToDeleteId(null);
       showSuccessNotification("Subtask deleted successfully!");
     } catch (error) {
       console.error("Error deleting subtask:", error);
       showErrorNotification("Failed to delete subtask. Please try again.");
     }
+  };
+
+  const cancelDeleteSubtask = () => {
+    setSubtaskToDeleteId(null);
   };
 
   // Real-time task listener
@@ -276,7 +255,8 @@ export function TaskDetailsScreen({
       }
 
       const response = await fetch(
-        `https://quicktasks-28yz.onrender.com/api/tasks/${task.id}`,
+        // `https://quicktasks-28yz.onrender.com/api/tasks/${task.id}`,
+        `http://localhost:8787/api/tasks/${task.id}`,
         {
           method: "PUT",
           headers: {
@@ -1074,7 +1054,7 @@ export function TaskDetailsScreen({
                     {isOwner && (
                       <button
                         className="subtask-delete-btn"
-                        onClick={() => deleteSubtask(subtask.id)}
+                        onClick={() => requestDeleteSubtask(subtask.id)}
                         title="Delete subtask"
                       >
                         <HiTrash />
@@ -1234,6 +1214,31 @@ export function TaskDetailsScreen({
               <button className="btn btn-danger" onClick={confirmDeleteTask}>
                 <HiTrash className="trash-animation" />
                 <span>Delete Task</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Subtask Delete Confirmation Modal */}
+      {subtaskToDeleteId && (
+        <div className="modal-overlay">
+          <div className="modal-content delete-modal">
+            <div className="delete-modal-header">
+              <h3>Delete Subtask</h3>
+            </div>
+            <p>
+              Are you sure you want to delete this subtask? This action cannot be
+              undone.
+            </p>
+            <div className="modal-actions">
+              <button className="btn btn-cancel" onClick={cancelDeleteSubtask}>
+                <HiXMark className="cancel-animation" />
+                <span>Cancel</span>
+              </button>
+              <button className="btn btn-danger" onClick={confirmDeleteSubtask}>
+                <HiTrash className="trash-animation" />
+                <span>Delete Subtask</span>
               </button>
             </div>
           </div>
