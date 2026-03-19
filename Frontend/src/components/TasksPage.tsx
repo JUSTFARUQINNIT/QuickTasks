@@ -6,6 +6,8 @@ import { calculateTaskCompletion } from "../utils/taskCompletion";
 import { TaskDetailsModal } from "./TaskDetailsModal";
 import { InviteCollaboratorModal } from "./InviteCollaboratorModal";
 import { deleteTask as apiDeleteTask } from "../api/tasks";
+import { NotificationBanner } from "./NotificationBanner";
+import { useNotification } from "../hooks/useNotification";
 import {
   addDoc,
   collection,
@@ -83,6 +85,8 @@ export function TasksPage({ mode = "both" }: TasksPageProps) {
   );
   const [isSyncing, setIsSyncing] = useState(false);
   const syncInFlight = useRef(false);
+  const { notification, showSuccessNotification, showErrorNotification } =
+    useNotification();
 
   async function fetchTasksForCurrentUser(): Promise<
     Array<{ id: string; data: Record<string, unknown> }>
@@ -635,12 +639,16 @@ export function TasksPage({ mode = "both" }: TasksPageProps) {
     const trimmedCategory = category.trim();
 
     if (!trimmedTitle) {
-      setError("Title is required.");
+      const message = "Title is required.";
+      setError(message);
+      showErrorNotification(message);
       return;
     }
 
     if (!trimmedCategory || !dueDate) {
-      setError("Category and due date are required.");
+      const message = "Category and due date are required.";
+      setError(message);
+      showErrorNotification(message);
       return;
     }
 
@@ -661,7 +669,9 @@ export function TasksPage({ mode = "both" }: TasksPageProps) {
     });
 
     if (duplicateTask) {
-      setError("A task with the same details already exists.");
+      const message = "A task with the same details already exists.";
+      setError(message);
+      showErrorNotification(message);
       return;
     }
 
@@ -743,10 +753,12 @@ export function TasksPage({ mode = "both" }: TasksPageProps) {
       }
 
       resetForm();
+      showSuccessNotification("Task created successfully.");
     } catch (err) {
       const message =
         err instanceof Error ? err.message : "Could not save task.";
       setError(message);
+      showErrorNotification(message);
     } finally {
       setSaving(false);
     }
@@ -1018,6 +1030,7 @@ export function TasksPage({ mode = "both" }: TasksPageProps) {
     <div className="tasks-shell tasks-shell--tasks">
       {isOffline && <p className="banner">Offline Mode</p>}
       {isSyncing && <p className="banner">Syncing…</p>}
+      <NotificationBanner notification={notification} />
       {showAdd && (
         <section className="tasks-panel tasks-form-panel">
           <h2 className="tasks-heading">Add a task</h2>
