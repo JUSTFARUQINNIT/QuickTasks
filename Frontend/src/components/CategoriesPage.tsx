@@ -29,13 +29,12 @@ export function CategoriesPage() {
     [],
   );
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
   const [name, setName] = useState("");
   const [editing, setEditing] = useState<CategoryEditingState>(null);
-  const { notification, showSuccessNotification, showErrorNotification } =
-    useNotification();
+  const { notification, showErrorNotification } = useNotification();
 
   useEffect(() => {
     let isMounted = true;

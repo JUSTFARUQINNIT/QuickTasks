@@ -43,8 +43,7 @@ export function InvitationsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [actioningId, setActioningId] = useState<string | null>(null);
-  const { notification, showSuccessNotification, showErrorNotification } =
-    useNotification();
+  const { notification, showErrorNotification } = useNotification();
 
   useEffect(() => {
     let isMounted = true;
