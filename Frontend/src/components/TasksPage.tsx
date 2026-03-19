@@ -880,10 +880,13 @@ export function TasksPage({ mode = "both" }: TasksPageProps) {
       } else {
         await apiDeleteTask(deleteId);
       }
+
+      showSuccessNotification("Task deleted successfully.");
     } catch (err) {
       const message =
         err instanceof Error ? err.message : "Could not delete task.";
       setError(message);
+      showErrorNotification(message);
     }
   }
 

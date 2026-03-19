@@ -34,7 +34,8 @@ export function CategoriesPage() {
 
   const [name, setName] = useState("");
   const [editing, setEditing] = useState<CategoryEditingState>(null);
-  const { notification, showErrorNotification } = useNotification();
+  const { notification, showSuccessNotification, showErrorNotification } =
+    useNotification();
 
   useEffect(() => {
     let isMounted = true;
@@ -147,7 +148,9 @@ export function CategoriesPage() {
       );
 
       if (duplicateExists) {
-        setError("A category with this name already exists.");
+        const msg = "A category with this name already exists.";
+        setError(msg);
+        showErrorNotification(msg);
         return;
       }
 
@@ -194,8 +197,12 @@ export function CategoriesPage() {
         ]);
       }
 
+      const successMsg = editing
+        ? "Category updated successfully."
+        : "Category created successfully.";
       setName("");
       setEditing(null);
+      showSuccessNotification(successMsg);
     } catch (err) {
       const message =
         err instanceof Error ? err.message : "Could not save category.";

@@ -8,6 +8,8 @@ import {
   serverTimestamp,
 } from "firebase/firestore";
 import { auth, db } from "../lib/firebaseClient";
+import { NotificationBanner } from "./NotificationBanner";
+import { useNotification } from "../hooks/useNotification";
 import type { Task } from "../types/tasks";
 
 type InviteCollaboratorModalProps = {
@@ -23,6 +25,8 @@ export function InviteCollaboratorModal({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const { notification, showSuccessNotification, showErrorNotification } =
+    useNotification();
 
   useEffect(() => {
     if (!error && !success) return;
@@ -42,7 +46,9 @@ export function InviteCollaboratorModal({
 
     const trimmedEmail = email.trim().toLowerCase();
     if (!trimmedEmail) {
-      setError("Email is required.");
+      const msg = "Email is required.";
+      setError(msg);
+      showErrorNotification(msg);
       return;
     }
 
@@ -59,7 +65,9 @@ export function InviteCollaboratorModal({
       const snap = await getDocs(q);
 
       if (snap.empty) {
-        setError("User not found");
+        const msg = "User not found";
+        setError(msg);
+        showErrorNotification(msg);
         return;
       }
 
@@ -99,10 +107,12 @@ export function InviteCollaboratorModal({
       }
 
       setSuccess("Invitation sent.");
+      showSuccessNotification("Invitation sent.");
     } catch (err) {
       const message =
         err instanceof Error ? err.message : "Could not send invitation.";
       setError(message);
+      showErrorNotification(message);
     } finally {
       setLoading(false);
     }
@@ -143,16 +153,7 @@ export function InviteCollaboratorModal({
           </div>
         </form>
 
-        {error && (
-          <p className="banner banner-error" style={{ marginTop: 12 }}>
-            {error}
-          </p>
-        )}
-        {success && (
-          <p className="banner banner-success" style={{ marginTop: 12 }}>
-            {success}
-          </p>
-        )}
+        <NotificationBanner notification={notification} />
       </div>
     </div>
   );

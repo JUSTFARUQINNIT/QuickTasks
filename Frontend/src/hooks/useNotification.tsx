@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 export type NotificationState = {
   type: "success" | "error";
@@ -24,6 +24,15 @@ export function useNotification() {
   function hide() {
     setNotification((prev) => ({ ...prev, show: false }));
   }
+
+  // Auto-hide after 3 seconds whenever a notification is shown.
+  useEffect(() => {
+    if (!notification.show) return;
+    const timeoutId = window.setTimeout(() => {
+      hide();
+    }, 3000);
+    return () => window.clearTimeout(timeoutId);
+  }, [notification.show]);
 
   return {
     notification,
