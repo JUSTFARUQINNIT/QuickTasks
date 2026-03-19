@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import type { FormEvent } from "react";
 import { auth, db } from "../lib/firebaseClient";
+import { NotificationBanner } from "./NotificationBanner";
+import { useNotification } from "../hooks/useNotification";
 import {
   addDoc,
   collection,
@@ -32,6 +34,8 @@ export function CategoriesPage() {
 
   const [name, setName] = useState("");
   const [editing, setEditing] = useState<CategoryEditingState>(null);
+  const { notification, showSuccessNotification, showErrorNotification } =
+    useNotification();
 
   useEffect(() => {
     let isMounted = true;
@@ -96,6 +100,7 @@ export function CategoriesPage() {
           err instanceof Error ? err.message : "Could not load categories.";
         if (!isMounted) return;
         setError(message);
+        showErrorNotification(message);
       } finally {
         if (isMounted) setLoading(false);
       }
@@ -196,6 +201,7 @@ export function CategoriesPage() {
       const message =
         err instanceof Error ? err.message : "Could not save category.";
       setError(message);
+      showErrorNotification(message);
     } finally {
       setSaving(false);
     }
@@ -251,6 +257,7 @@ export function CategoriesPage() {
       const message =
         err instanceof Error ? err.message : "Could not delete category.";
       setError(message);
+      showErrorNotification(message);
     } finally {
       setSaving(false);
     }
@@ -306,7 +313,7 @@ export function CategoriesPage() {
           </div>
         </form>
 
-        {error && <p className="banner banner-error">{error}</p>}
+        <NotificationBanner notification={notification} />
       </section>
 
       <section

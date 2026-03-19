@@ -14,6 +14,8 @@ import {
   setDoc,
 } from "firebase/firestore";
 import { auth, db } from "../lib/firebaseClient";
+import { NotificationBanner } from "./NotificationBanner";
+import { useNotification } from "../hooks/useNotification";
 
 type TaskInvite = {
   id: string;
@@ -41,6 +43,8 @@ export function InvitationsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [actioningId, setActioningId] = useState<string | null>(null);
+  const { notification, showSuccessNotification, showErrorNotification } =
+    useNotification();
 
   useEffect(() => {
     let isMounted = true;
@@ -214,6 +218,7 @@ export function InvitationsPage() {
           err instanceof Error ? err.message : "Could not load invitations.";
         if (!isMounted) return;
         setError(message);
+        showErrorNotification(message);
         setLoading(false);
       }
     }
@@ -328,6 +333,7 @@ export function InvitationsPage() {
       const message =
         err instanceof Error ? err.message : "Could not accept invitation.";
       setError(message);
+      showErrorNotification(message);
     } finally {
       setActioningId(null);
     }
@@ -356,6 +362,7 @@ export function InvitationsPage() {
       const message =
         err instanceof Error ? err.message : "Could not decline invitation.";
       setError(message);
+      showErrorNotification(message);
     } finally {
       setActioningId(null);
     }
@@ -370,6 +377,8 @@ export function InvitationsPage() {
             Review collaboration invites for your tasks.
           </p>
         </div>
+
+        <NotificationBanner notification={notification} />
 
         {loading ? (
           <div className="tasks-empty">

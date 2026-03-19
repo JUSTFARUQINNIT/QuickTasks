@@ -1,6 +1,8 @@
 import { auth, db, storage } from "../../lib/firebaseClient";
 import type { Task } from "../../types/tasks";
 import { calculateTaskCompletion } from "../../utils/taskCompletion";
+import { NotificationBanner } from "../NotificationBanner";
+import { useNotification } from "../../hooks/useNotification";
 import { TaskHeader } from "./TaskHeader";
 import { ProfileModal } from "./ProfileModal";
 import { SubtaskModal } from "../SubtaskModal";
@@ -26,7 +28,6 @@ import {
   HiClock,
   HiUserCircle,
   HiCheckCircle,
-  HiExclamationCircle,
   HiUserPlus,
   HiShare,
   HiChatBubbleLeft,
@@ -84,11 +85,8 @@ export function TaskDetailsScreen({
   const [currentTask, setCurrentTask] = useState<Task>(task);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [subtaskToDeleteId, setSubtaskToDeleteId] = useState<string | null>(null);
-  const [notification, setNotification] = useState<{
-    type: "success" | "error";
-    message: string;
-    show: boolean;
-  }>({ type: "success", message: "", show: false });
+  const { notification, showSuccessNotification, showErrorNotification } =
+    useNotification();
 
   const handleDeleteTask = async () => {
     if (!isOwner) {
@@ -99,19 +97,7 @@ export function TaskDetailsScreen({
     setShowDeleteModal(true);
   };
 
-  const showSuccessNotification = (message: string) => {
-    setNotification({ type: "success", message, show: true });
-    setTimeout(() => {
-      setNotification((prev) => ({ ...prev, show: false }));
-    }, 3000);
-  };
-
-  const showErrorNotification = (message: string) => {
-    setNotification({ type: "error", message, show: true });
-    setTimeout(() => {
-      setNotification((prev) => ({ ...prev, show: false }));
-    }, 5000);
-  };
+  // Notifications are driven via useNotification hook and NotificationBanner.
 
   const confirmDeleteTask = async () => {
     try {
@@ -255,8 +241,8 @@ export function TaskDetailsScreen({
       }
 
       const response = await fetch(
-        // `https://quicktasks-28yz.onrender.com/api/tasks/${task.id}`,
-        `http://localhost:8787/api/tasks/${task.id}`,
+        `https://quicktasks-28yz.onrender.com/api/tasks/${task.id}`,
+        // `http://localhost:8787/api/tasks/${task.id}`,
         {
           method: "PUT",
           headers: {
@@ -1246,18 +1232,7 @@ export function TaskDetailsScreen({
       )}
 
       {/* Custom Notification */}
-      {notification.show && (
-        <div className={`notification notification--${notification.type}`}>
-          <div className="notification-content">
-            {notification.type === "success" ? (
-              <HiCheckCircle className="notification-icon" />
-            ) : (
-              <HiExclamationCircle className="notification-icon" />
-            )}
-            <span className="notification-message">{notification.message}</span>
-          </div>
-        </div>
-      )}
+      <NotificationBanner notification={notification} />
 
       {/* Subtask Modal */}
       <SubtaskModal

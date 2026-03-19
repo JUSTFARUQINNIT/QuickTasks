@@ -8,6 +8,8 @@ import {
   createUserWithEmailAndPassword,
 } from "firebase/auth";
 import { auth } from "../lib/firebaseClient";
+import { NotificationBanner } from "./NotificationBanner";
+import { useNotification } from "../hooks/useNotification";
 
 type AuthMode = "signin" | "signup";
 
@@ -24,6 +26,8 @@ export function AuthView({ mode }: Props) {
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [showPassword, setShowPassword] = useState(false);
+  const { notification, showSuccessNotification, showErrorNotification } =
+    useNotification();
 
   const title = useMemo(
     () => (mode === "signin" ? "Sign in" : "Create your account"),
@@ -39,15 +43,13 @@ export function AuthView({ mode }: Props) {
 
   useEffect(() => {
     if (!error) return;
-    const id = window.setTimeout(() => setError(null), 5000);
-    return () => window.clearTimeout(id);
-  }, [error]);
+    showErrorNotification(error);
+  }, [error, showErrorNotification]);
 
   useEffect(() => {
     if (!message) return;
-    const id = window.setTimeout(() => setMessage(null), 5000);
-    return () => window.clearTimeout(id);
-  }, [message]);
+    showSuccessNotification(message);
+  }, [message, showSuccessNotification]);
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -84,11 +86,12 @@ export function AuthView({ mode }: Props) {
         );
       }
     } catch (err) {
-      const message =
+      const messageText =
         err instanceof Error
           ? err.message
           : "Something went wrong. Please try again.";
-      setError(message);
+      setError(messageText);
+      showErrorNotification(messageText);
     } finally {
       setLoading(false);
       setLoadingLabel(null);
@@ -104,11 +107,12 @@ export function AuthView({ mode }: Props) {
       const provider = new GoogleAuthProvider();
       await signInWithPopup(auth, provider);
     } catch (err) {
-      const message =
+      const messageText =
         err instanceof Error
           ? err.message
           : "Google sign-in failed. Please try again.";
-      setError(message);
+      setError(messageText);
+      showErrorNotification(messageText);
     } finally {
       setLoading(false);
       setLoadingLabel(null);
@@ -144,11 +148,12 @@ export function AuthView({ mode }: Props) {
       setMessage("Password reset email sent. Check your inbox.");
     } catch (err) {
       console.error("AuthView reset password error (backend):", err);
-      const message =
+      const messageText =
         err instanceof Error
           ? err.message
           : "Could not send reset email. Please try again.";
-      setError(message);
+      setError(messageText);
+      showErrorNotification(messageText);
     } finally {
       setLoading(false);
       setLoadingLabel(null);
@@ -347,8 +352,7 @@ export function AuthView({ mode }: Props) {
           {mode === "signin" ? "Sign in with Google" : "Continue with Google"}
         </button>
 
-        {message && <p className="banner banner-success">{message}</p>}
-        {error && <p className="banner banner-error">{error}</p>}
+        <NotificationBanner notification={notification} />
 
         <p className="switch-auth">
           {mode === "signin" ? (
