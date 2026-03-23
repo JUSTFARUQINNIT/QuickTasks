@@ -58,8 +58,7 @@ router.post(
         .status(500)
         .json({ error: e.message || "Sync to Google Calendar failed" });
     }
-  }
+  },
 );
 
 export default router;
-

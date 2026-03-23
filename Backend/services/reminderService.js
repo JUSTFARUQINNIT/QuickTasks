@@ -119,7 +119,12 @@ export async function sendDailyReminderEmails() {
 
     if (snapshot.empty) {
       console.log(`Daily reminders: no tasks due today (${todayStr}).`);
-      return { usersEmailed: 0, usersSkipped: 0, tasksTotal: 0, date: todayStr };
+      return {
+        usersEmailed: 0,
+        usersSkipped: 0,
+        tasksTotal: 0,
+        date: todayStr,
+      };
     }
 
     /** @type {Map<string, string>} uid -> email cache */
@@ -143,9 +148,14 @@ export async function sendDailyReminderEmails() {
 
     if (byUser.size === 0) {
       console.log(
-        `Daily reminders: ${snapshot.size} tasks due ${todayStr} but no owner emails could be resolved (check user_id / Auth).`
+        `Daily reminders: ${snapshot.size} tasks due ${todayStr} but no owner emails could be resolved (check user_id / Auth).`,
       );
-      return { usersEmailed: 0, usersSkipped: 0, tasksTotal: 0, date: todayStr };
+      return {
+        usersEmailed: 0,
+        usersSkipped: 0,
+        tasksTotal: 0,
+        date: todayStr,
+      };
     }
 
     const from =
@@ -175,7 +185,7 @@ export async function sendDailyReminderEmails() {
     }
 
     console.log(
-      `Daily reminders (${todayStr}): ${usersEmailed} users emailed, ${usersSkipped} failed, ${tasksTotal} tasks.`
+      `Daily reminders (${todayStr}): ${usersEmailed} users emailed, ${usersSkipped} failed, ${tasksTotal} tasks.`,
     );
     return { usersEmailed, usersSkipped, tasksTotal, date: todayStr };
   } catch (error) {

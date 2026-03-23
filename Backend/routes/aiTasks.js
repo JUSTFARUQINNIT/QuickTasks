@@ -28,8 +28,7 @@ router.get(
       console.error("AI suggestions error:", e);
       return res.status(500).json({ error: "Failed to compute suggestions" });
     }
-  }
+  },
 );
 
 export default router;
-

@@ -42,7 +42,9 @@ export function SubtaskModal({
 
     // If this subtask is marked as "owner", it must be assigned to someone
     if (selectedRole === "owner" && !selectedCollaborator) {
-      console.error("Owner subtasks must be assigned to a specific collaborator.");
+      console.error(
+        "Owner subtasks must be assigned to a specific collaborator.",
+      );
       return;
     }
 
@@ -52,7 +54,9 @@ export function SubtaskModal({
       const taskDate = new Date(taskDueDate);
 
       if (subtaskDate > taskDate) {
-        console.error(`Subtask due date cannot be after the task due date (${new Date(taskDueDate).toLocaleDateString()})`);
+        console.error(
+          `Subtask due date cannot be after the task due date (${new Date(taskDueDate).toLocaleDateString()})`,
+        );
         return;
       }
     }
@@ -155,17 +159,17 @@ export function SubtaskModal({
                 </div>
 
                 <div className="form-group">
-                <label htmlFor="role">Role</label>
-                <select
-                  id="role"
-                  value={selectedRole}
-                  onChange={(e) => setSelectedRole(e.target.value)}
-                >
-                  <option value="collaborator">Collaborator</option>
-                  <option value="owner">
-                    Task owner (can mark this subtask complete)
-                  </option>
-                </select>
+                  <label htmlFor="role">Role</label>
+                  <select
+                    id="role"
+                    value={selectedRole}
+                    onChange={(e) => setSelectedRole(e.target.value)}
+                  >
+                    <option value="collaborator">Collaborator</option>
+                    <option value="owner">
+                      Task owner (can mark this subtask complete)
+                    </option>
+                  </select>
                 </div>
 
                 <div className="form-group">

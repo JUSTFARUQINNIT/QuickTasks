@@ -41,4 +41,3 @@ export function useNotification() {
     hideNotification: hide,
   };
 }
-

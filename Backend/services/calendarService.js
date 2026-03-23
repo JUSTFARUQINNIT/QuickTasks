@@ -1,11 +1,8 @@
 import { google } from "googleapis";
 import { adminDb } from "../utils/firebase.js";
 
-const {
-  GOOGLE_CLIENT_ID,
-  GOOGLE_CLIENT_SECRET,
-  GOOGLE_REDIRECT_URI,
-} = process.env;
+const { GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GOOGLE_REDIRECT_URI } =
+  process.env;
 
 function getOAuth2Client() {
   if (!GOOGLE_CLIENT_ID || !GOOGLE_CLIENT_SECRET || !GOOGLE_REDIRECT_URI) {
@@ -14,7 +11,7 @@ function getOAuth2Client() {
   return new google.auth.OAuth2(
     GOOGLE_CLIENT_ID,
     GOOGLE_CLIENT_SECRET,
-    GOOGLE_REDIRECT_URI
+    GOOGLE_REDIRECT_URI,
   );
 }
 
@@ -36,26 +33,20 @@ export async function handleGoogleCallback(code, userIdFromState) {
   const oauth2Client = getOAuth2Client();
   const { tokens } = await oauth2Client.getToken(code);
 
-  await adminDb
-    .collection("calendar_tokens")
-    .doc(userIdFromState)
-    .set(
-      {
-        provider: "google",
-        tokens,
-        updated_at: new Date().toISOString(),
-      },
-      { merge: true }
-    );
+  await adminDb.collection("calendar_tokens").doc(userIdFromState).set(
+    {
+      provider: "google",
+      tokens,
+      updated_at: new Date().toISOString(),
+    },
+    { merge: true },
+  );
 
   return true;
 }
 
 async function getAuthorizedCalendarClient(userId) {
-  const doc = await adminDb
-    .collection("calendar_tokens")
-    .doc(userId)
-    .get();
+  const doc = await adminDb.collection("calendar_tokens").doc(userId).get();
   if (!doc.exists) throw new Error("Google Calendar not connected");
 
   const data = doc.data() || {};
@@ -128,4 +119,3 @@ export async function deleteTaskEventFromGoogle(taskId) {
 
   await snap.ref.update({ googleEventId: null });
 }
-

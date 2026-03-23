@@ -21,7 +21,6 @@ import {
   query,
   setDoc,
   where,
-  // Firestore,
 } from "firebase/firestore";
 import { calculateTaskCompletion } from "./utils/taskCompletion";
 import {
@@ -242,52 +241,75 @@ function DashboardOverview() {
         }
 
         // Fetch tasks exactly like TasksPage - both owned and invited
-        const ownerQuery = query(collection(db, "tasks"), where("user_id", "==", user.uid));
-        
+        const ownerQuery = query(
+          collection(db, "tasks"),
+          where("user_id", "==", user.uid),
+        );
+
         // Also query for tasks where user is a collaborator (to catch any tasks that might be structured differently)
         let collaboratorResult;
         try {
-          const collaboratorQuery = query(collection(db, "tasks"), where("collaborators", "array-contains", user.uid));
+          const collaboratorQuery = query(
+            collection(db, "tasks"),
+            where("collaborators", "array-contains", user.uid),
+          );
           collaboratorResult = await getDocs(collaboratorQuery);
         } catch (collabError) {
-          console.warn("Collaborator query failed, using fallback:", collabError);
+          console.warn(
+            "Collaborator query failed, using fallback:",
+            collabError,
+          );
           collaboratorResult = { docs: [] }; // Empty fallback
         }
-        
+
         // Also query for shared tasks where user is a collaborator (accepted invitations)
         let sharedSnap;
         try {
           // First try to get tasks where user is explicitly in collaborators array
-          const collaboratorSharedQuery = query(collection(db, "tasks"), 
+          const collaboratorSharedQuery = query(
+            collection(db, "tasks"),
             where("shared", "==", true),
-            where("collaborators", "array-contains", user.uid)
+            where("collaborators", "array-contains", user.uid),
           );
           sharedSnap = await getDocs(collaboratorSharedQuery);
         } catch (sharedError) {
           console.warn("Shared query failed, using fallback:", sharedError);
-          
+
           // Alternative approach: Get all shared tasks and filter for ones where user is in collaborators
           try {
-            const allSharedTasksQuery = query(collection(db, "tasks"), where("shared", "==", true));
+            const allSharedTasksQuery = query(
+              collection(db, "tasks"),
+              where("shared", "==", true),
+            );
             const allSharedTasks = await getDocs(allSharedTasksQuery);
-            
+
             // Filter for shared tasks where user is explicitly in collaborators
-            const sharedWithUser = allSharedTasks.docs.filter(doc => {
+            const sharedWithUser = allSharedTasks.docs.filter((doc) => {
               const data = doc.data();
-              return data.collaborators && 
-                     Array.isArray(data.collaborators) && 
-                     data.collaborators.includes(user.uid);
+              return (
+                data.collaborators &&
+                Array.isArray(data.collaborators) &&
+                data.collaborators.includes(user.uid)
+              );
             });
-            
+
             sharedSnap = { docs: sharedWithUser };
-            console.log("✅ Alternative shared query found tasks where user is collaborator:", sharedWithUser.length);
+            console.log(
+              "✅ Alternative shared query found tasks where user is collaborator:",
+              sharedWithUser.length,
+            );
           } catch (altError) {
             console.warn("Alternative shared query also failed:", altError);
             sharedSnap = { docs: [] }; // Empty fallback
           }
         }
-        
-        const invitedTasksQuery = collection(db, "userTasks", user.uid, "tasks");
+
+        const invitedTasksQuery = collection(
+          db,
+          "userTasks",
+          user.uid,
+          "tasks",
+        );
 
         const [ownerSnap, invitedSnap] = await Promise.all([
           getDocs(ownerQuery),
@@ -323,13 +345,18 @@ function DashboardOverview() {
                     // Keep invited-specific fields
                     invitedAt: invitedData.invitedAt,
                     invitedBy: invitedData.invitedBy,
-                  }
+                  },
                 };
               }
             } catch (err) {
               // Handle permission errors gracefully - use invited data instead
-              if (err instanceof Error && err.message.includes('Missing or insufficient permissions')) {
-                console.log(`Permission denied for master task ${masterId}, using invited data`);
+              if (
+                err instanceof Error &&
+                err.message.includes("Missing or insufficient permissions")
+              ) {
+                console.log(
+                  `Permission denied for master task ${masterId}, using invited data`,
+                );
               } else {
                 console.warn(
                   `Could not fetch master task ${masterId}, using invited data:`,
@@ -351,21 +378,21 @@ function DashboardOverview() {
                 collaborators: invitedData.collaborators || [],
                 shared: invitedData.shared || false,
                 completed: invitedData.completed || false,
-              }
+              },
             };
-          })
+          }),
         );
 
         // Process collaborator query results
-        const collaboratorTasks = collaboratorResult.docs.map((doc) => ({ 
-          id: doc.id, 
-          data: doc.data() as any
+        const collaboratorTasks = collaboratorResult.docs.map((doc) => ({
+          id: doc.id,
+          data: doc.data() as any,
         }));
 
         // Process shared query results
-        const sharedTasks = sharedSnap.docs.map((doc) => ({ 
-          id: doc.id, 
-          data: doc.data() as any
+        const sharedTasks = sharedSnap.docs.map((doc) => ({
+          id: doc.id,
+          data: doc.data() as any,
         }));
 
         console.log("Dashboard query details:", {
@@ -373,7 +400,11 @@ function DashboardOverview() {
           collaboratorTasks: collaboratorResult.docs.length,
           sharedTasks: sharedSnap.docs.length,
           invitedTasks: invitedSnap.docs.length,
-          totalTasks: ownerSnap.docs.length + collaboratorResult.docs.length + sharedSnap.docs.length + invitedSnap.docs.length
+          totalTasks:
+            ownerSnap.docs.length +
+            collaboratorResult.docs.length +
+            sharedSnap.docs.length +
+            invitedSnap.docs.length,
         });
 
         // Debug: Show which queries found data
@@ -381,7 +412,10 @@ function DashboardOverview() {
           console.log("✅ Owner query found tasks:", ownerSnap.docs.length);
         }
         if (collaboratorResult.docs.length > 0) {
-          console.log("✅ Collaborator query found tasks:", collaboratorResult.docs.length);
+          console.log(
+            "✅ Collaborator query found tasks:",
+            collaboratorResult.docs.length,
+          );
         }
         if (sharedSnap.docs.length > 0) {
           console.log("✅ Shared query found tasks:", sharedSnap.docs.length);
@@ -393,7 +427,7 @@ function DashboardOverview() {
         console.log("Dashboard query results:", {
           ownerTasks: ownerSnap.docs.length,
           collaboratorTasks: collaboratorResult.docs.length,
-          invitedTasks: invitedSnap.docs.length
+          invitedTasks: invitedSnap.docs.length,
         });
 
         // Combine all task data exactly like TasksPage - ensure consistent { id, data } structure
@@ -408,8 +442,9 @@ function DashboardOverview() {
         console.log("Task structure sample:", allTasks[0]);
 
         // Remove duplicates (tasks might appear in multiple queries)
-        const uniqueTasks = allTasks.filter((task, index, self) => 
-          index === self.findIndex((t) => t.id === task.id)
+        const uniqueTasks = allTasks.filter(
+          (task, index, self) =>
+            index === self.findIndex((t) => t.id === task.id),
         );
 
         // Utility function to safely extract user_id from task data
@@ -446,11 +481,18 @@ function DashboardOverview() {
 
         setTasks(processedTasks);
         console.log("Dashboard loaded tasks:", processedTasks.length);
-        console.log("Completed tasks:", processedTasks.filter(t => calculateTaskCompletion(t)).length);
+        console.log(
+          "Completed tasks:",
+          processedTasks.filter((t) => calculateTaskCompletion(t)).length,
+        );
       } catch (err) {
         console.error("Dashboard data loading error:", err);
         const errorMessage =
-          err instanceof Error ? err.message : typeof err === "string" ? err : "";
+          err instanceof Error
+            ? err.message
+            : typeof err === "string"
+              ? err
+              : "";
         console.error("Error details:", {
           message: errorMessage,
           code: (err as any)?.code,
@@ -491,9 +533,15 @@ function DashboardOverview() {
     due.setHours(0, 0, 0, 0);
     return due < today;
   }).length;
-  const pendingTasks = tasks.filter((t) => !calculateTaskCompletion(t)).length - overdueTasks;
+  const pendingTasks =
+    tasks.filter((t) => !calculateTaskCompletion(t)).length - overdueTasks;
 
-  console.log("Dashboard stats:", { totalTasks, completedTasks, overdueTasks, pendingTasks });
+  console.log("Dashboard stats:", {
+    totalTasks,
+    completedTasks,
+    overdueTasks,
+    pendingTasks,
+  });
 
   // Ensure we have valid numbers even if data is loading
   const displayTasks = Math.max(0, totalTasks);
@@ -552,7 +600,7 @@ function DashboardOverview() {
       <section className="dashboard-grid">
         <article className="stat-card">
           <div className="stat-label-row">
-            <div className="stat-label">Total Tasks</div>
+            <div className="stat -label">Total Tasks</div>
             <span className="stat-trend stat-trend--neutral">Live</span>
           </div>
           <div className="stat-value">{loading ? "—" : displayTasks}</div>
@@ -900,7 +948,7 @@ function App() {
       : currentPath.startsWith("/categories")
         ? {
             label: "Categories",
-            icon: <HiOutlineClipboardDocumentList />,
+            icon: <HiOutlineSquares2X2 />,
             path: "/categories",
           }
         : currentPath.startsWith("/settings")
@@ -918,7 +966,7 @@ function App() {
             : currentPath.startsWith("/invitations")
               ? {
                   label: "Invitations",
-                  icon: <HiOutlineBell />,
+                  icon: <HiOutlineUserPlus />,
                   path: "/invitations",
                 }
               : {

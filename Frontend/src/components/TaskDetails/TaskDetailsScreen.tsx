@@ -84,7 +84,9 @@ export function TaskDetailsScreen({
   const [subtaskModalOpen, setSubtaskModalOpen] = useState(false);
   const [currentTask, setCurrentTask] = useState<Task>(task);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
-  const [subtaskToDeleteId, setSubtaskToDeleteId] = useState<string | null>(null);
+  const [subtaskToDeleteId, setSubtaskToDeleteId] = useState<string | null>(
+    null,
+  );
   const { notification, showSuccessNotification, showErrorNotification } =
     useNotification();
 
@@ -126,7 +128,9 @@ export function TaskDetailsScreen({
   const confirmDeleteSubtask = async () => {
     if (!subtaskToDeleteId) return;
     try {
-      const updatedSubtasks = subtasks.filter((st) => st.id !== subtaskToDeleteId);
+      const updatedSubtasks = subtasks.filter(
+        (st) => st.id !== subtaskToDeleteId,
+      );
       const taskRef = doc(db, "tasks", task.id);
       await updateDoc(taskRef, {
         subtasks: updatedSubtasks,
@@ -555,7 +559,7 @@ export function TaskDetailsScreen({
   const updateTaskCompletionBasedOnSubtasks = async () => {
     const shouldBeCompleted = getTaskCompletionStatus();
     const currentlyCompleted = currentTask.completed;
-    
+
     // Only update if completion status should change
     if (shouldBeCompleted !== currentlyCompleted) {
       try {
@@ -564,7 +568,9 @@ export function TaskDetailsScreen({
           completed: shouldBeCompleted,
           completed_at: shouldBeCompleted ? new Date().toISOString() : null,
         });
-        console.log(`Task completion updated to ${shouldBeCompleted} based on subtask progress`);
+        console.log(
+          `Task completion updated to ${shouldBeCompleted} based on subtask progress`,
+        );
       } catch (error) {
         console.error("Error updating task completion:", error);
       }
@@ -623,7 +629,7 @@ export function TaskDetailsScreen({
   const getStatusClass = () => {
     const isCompleted = getTaskCompletionStatus();
     if (isCompleted) return "task-status-completed";
-    
+
     // Check if overdue
     if (task.due_date) {
       const today = new Date();
@@ -632,7 +638,7 @@ export function TaskDetailsScreen({
       due.setHours(0, 0, 0, 0);
       if (due < today) return "task-status-overdue";
     }
-    
+
     // Check progress level
     const progress = calculateProgress();
     if (progress > 0) return "task-status-in-progress";
@@ -642,7 +648,7 @@ export function TaskDetailsScreen({
   const getStatusText = () => {
     const isCompleted = getTaskCompletionStatus();
     if (isCompleted) return "Completed";
-    
+
     // Check if overdue
     if (task.due_date) {
       const today = new Date();
@@ -651,7 +657,7 @@ export function TaskDetailsScreen({
       due.setHours(0, 0, 0, 0);
       if (due < today) return "Overdue";
     }
-    
+
     // Check progress level
     const progress = calculateProgress();
     if (progress > 0) return `In Progress (${progress}%)`;
@@ -716,28 +722,33 @@ export function TaskDetailsScreen({
             </div>
             <h1 className="task-details-title">{task.title}</h1>
             <div className="task-details-status">
+              <div className="status-priority">
               <span className={`task-status-badge ${getStatusClass()}`}>
                 {getStatusText()}
               </span>
-              {subtasks.length > 0 && (
-                <div className="task-progress-info">
-                  <div className="task-progress-bar">
-                    <div 
-                      className="task-progress-fill" 
-                      style={{ width: `${calculateProgress()}%` }}
-                    />
-                  </div>
-                  <span className="task-progress-text">
-                    {subtasks.filter(st => st.completed).length} of {subtasks.length} subtasks completed
-                  </span>
-                </div>
-              )}
-            </div>
-            <div className="task-details-header-meta">
+                <div className="task-details-header-meta">
               <span className={`task-pill ${getPriorityClass()}`}>
                 {task.priority?.toUpperCase() || "MEDIUM"}
               </span>
             </div>
+            </div>
+              {subtasks.length > 0 && (
+                <div className="task-progress-info">
+                  <div className="task-progress-bar">
+                    <div
+                      className="task-progress-fill"
+                      style={{ width: `${calculateProgress()}%` }}
+                    />
+                    
+                  </div>
+                  <span className="task-progress-text">
+                    {subtasks.filter((st) => st.completed).length} of{" "}
+                    {subtasks.length} subtasks completed
+                  </span>
+                </div>
+              )}
+            </div>
+            
           </section>
 
           {/* Team Members Section */}
@@ -1214,8 +1225,8 @@ export function TaskDetailsScreen({
               <h3>Delete Subtask</h3>
             </div>
             <p>
-              Are you sure you want to delete this subtask? This action cannot be
-              undone.
+              Are you sure you want to delete this subtask? This action cannot
+              be undone.
             </p>
             <div className="modal-actions">
               <button className="btn btn-cancel" onClick={cancelDeleteSubtask}>

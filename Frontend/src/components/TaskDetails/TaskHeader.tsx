@@ -7,11 +7,7 @@ type TaskHeaderProps = {
   onDelete?: () => void;
 };
 
-export function TaskHeader({
-  isOwner,
-  onBack,
-  onEdit,
-}: TaskHeaderProps) {
+export function TaskHeader({ isOwner, onBack, onEdit }: TaskHeaderProps) {
   return (
     <header className="task-details-header">
       <button

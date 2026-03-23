@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useState, type FormEvent } from "react";
 import {
   collection,
   query,
@@ -23,31 +23,16 @@ export function InviteCollaboratorModal({
 }: InviteCollaboratorModalProps) {
   const [email, setEmail] = useState(task.assigned_email ?? "");
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState<string | null>(null);
   const { notification, showSuccessNotification, showErrorNotification } =
     useNotification();
 
-  useEffect(() => {
-    if (!error && !success) return;
-    const timeoutId = window.setTimeout(() => {
-      setError(null);
-      setSuccess(null);
-    }, 4000);
-    return () => {
-      window.clearTimeout(timeoutId);
-    };
-  }, [error, success]);
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
-    setError(null);
-    setSuccess(null);
 
     const trimmedEmail = email.trim().toLowerCase();
     if (!trimmedEmail) {
       const msg = "Email is required.";
-      setError(msg);
       showErrorNotification(msg);
       return;
     }
@@ -66,7 +51,6 @@ export function InviteCollaboratorModal({
 
       if (snap.empty) {
         const msg = "User not found";
-        setError(msg);
         showErrorNotification(msg);
         return;
       }
@@ -106,12 +90,11 @@ export function InviteCollaboratorModal({
         throw new Error(body?.error ?? "Could not send invite email.");
       }
 
-      setSuccess("Invitation sent.");
       showSuccessNotification("Invitation sent.");
+      setEmail("");
     } catch (err) {
       const message =
         err instanceof Error ? err.message : "Could not send invitation.";
-      setError(message);
       showErrorNotification(message);
     } finally {
       setLoading(false);

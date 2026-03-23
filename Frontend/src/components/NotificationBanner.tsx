@@ -21,4 +21,3 @@ export function NotificationBanner({ notification }: Props) {
     </div>
   );
 }
-

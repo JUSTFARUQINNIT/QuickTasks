@@ -31,15 +31,13 @@ export async function requireTaskAccess(req, res, next) {
     }
 
     const data = snap.data() || {};
-    const ownerId =
-      typeof data.user_id === "string" ? (data.user_id) : null;
+    const ownerId = typeof data.user_id === "string" ? data.user_id : null;
     const collaborators = Array.isArray(data.collaborators)
       ? data.collaborators
       : [];
 
     const uid = req.user?.uid;
-    const canAccess =
-      !!uid && (ownerId === uid || collaborators.includes(uid));
+    const canAccess = !!uid && (ownerId === uid || collaborators.includes(uid));
 
     if (!canAccess) {
       return res.status(403).json({ error: "Forbidden" });
@@ -52,4 +50,3 @@ export async function requireTaskAccess(req, res, next) {
     return res.status(500).json({ error: "Failed to verify task access" });
   }
 }
-

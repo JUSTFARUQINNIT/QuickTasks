@@ -6,7 +6,7 @@ const db = adminDb; // Use adminDb directly for full admin privileges
 
 export default async function taskManagerRoutes(req, res) {
   console.log(`📥 TaskManager route hit: ${req.method} ${req.originalUrl}`);
-  
+
   const { taskId } = req.params;
 
   if (!taskId) {
@@ -151,12 +151,10 @@ async function handlePutRequest(req, res, taskRef, taskData, isOwner, userId) {
         targetSubtask?.role === "owner";
 
       if (!isOwner && !isSubtaskOwner) {
-        return res
-          .status(403)
-          .json({
-            error:
-              "Only task owners or assigned subtask owners can update subtasks",
-          });
+        return res.status(403).json({
+          error:
+            "Only task owners or assigned subtask owners can update subtasks",
+        });
       }
 
       const updatedSubtasks = (taskData.subtasks || []).map((subtask) =>
@@ -201,8 +199,10 @@ async function handlePutRequest(req, res, taskRef, taskData, isOwner, userId) {
 
 async function handleCascadeDelete(req, res, taskId, userId) {
   try {
-    console.log(`🗑️ Cascade delete requested for task ${taskId} by user ${userId}`);
-    
+    console.log(
+      `🗑️ Cascade delete requested for task ${taskId} by user ${userId}`,
+    );
+
     // Get task to verify ownership
     const taskRef = db.collection("tasks").doc(taskId);
     const taskSnap = await taskRef.get();
@@ -213,19 +213,25 @@ async function handleCascadeDelete(req, res, taskId, userId) {
     }
 
     const taskData = taskSnap.data();
-    console.log(`📋 Task found:`, { 
-      title: taskData.title, 
-      owner: taskData.user_id, 
-      collaborators: taskData.collaborators 
+    console.log(`📋 Task found:`, {
+      title: taskData.title,
+      owner: taskData.user_id,
+      collaborators: taskData.collaborators,
     });
-    
+
     // Only allow original owner to delete the task
     if (taskData.user_id !== userId) {
-      console.log(`🚫 User ${userId} is not owner (owner: ${taskData.user_id})`);
-      return res.status(403).json({ error: "Only task owner can delete this task" });
+      console.log(
+        `🚫 User ${userId} is not owner (owner: ${taskData.user_id})`,
+      );
+      return res
+        .status(403)
+        .json({ error: "Only task owner can delete this task" });
     }
 
-    console.log(`✅ User ${userId} confirmed as owner, proceeding with cascade deletion`);
+    console.log(
+      `✅ User ${userId} confirmed as owner, proceeding with cascade deletion`,
+    );
 
     // Perform cascade deletion with admin privileges
     const deletePromises = [];
@@ -237,17 +243,31 @@ async function handleCascadeDelete(req, res, taskId, userId) {
     deletedPaths.push(`tasks/${taskId}`);
 
     // 2. Delete from owner's userTasks
-    const ownerUserTaskRef = db.collection("userTasks").doc(userId).collection("tasks").doc(taskId);
-    console.log(`🗑️ Deleting from owner's userTasks: userTasks/${userId}/tasks/${taskId}`);
+    const ownerUserTaskRef = db
+      .collection("userTasks")
+      .doc(userId)
+      .collection("tasks")
+      .doc(taskId);
+    console.log(
+      `🗑️ Deleting from owner's userTasks: userTasks/${userId}/tasks/${taskId}`,
+    );
     deletePromises.push(ownerUserTaskRef.delete());
     deletedPaths.push(`userTasks/${userId}/tasks/${taskId}`);
 
     // 3. Delete from all collaborators' userTasks
     if (taskData.collaborators && Array.isArray(taskData.collaborators)) {
-      console.log(`🗑️ Deleting from ${taskData.collaborators.length} collaborators' userTasks`);
+      console.log(
+        `🗑️ Deleting from ${taskData.collaborators.length} collaborators' userTasks`,
+      );
       taskData.collaborators.forEach((collaboratorId) => {
-        const collaboratorUserTaskRef = db.collection("userTasks").doc(collaboratorId).collection("tasks").doc(taskId);
-        console.log(`🗑️ Deleting from collaborator ${collaboratorId}: userTasks/${collaboratorId}/tasks/${taskId}`);
+        const collaboratorUserTaskRef = db
+          .collection("userTasks")
+          .doc(collaboratorId)
+          .collection("tasks")
+          .doc(taskId);
+        console.log(
+          `🗑️ Deleting from collaborator ${collaboratorId}: userTasks/${collaboratorId}/tasks/${taskId}`,
+        );
         deletePromises.push(collaboratorUserTaskRef.delete());
         deletedPaths.push(`userTasks/${collaboratorId}/tasks/${taskId}`);
       });
@@ -257,20 +277,27 @@ async function handleCascadeDelete(req, res, taskId, userId) {
     console.log(`🗑️ Searching for all userTasks references to task ${taskId}`);
     try {
       // Query all userTasks subcollections for this task ID
-      const allUserTasksCollections = await db.collection("userTasks").listDocuments();
-      
+      const allUserTasksCollections = await db
+        .collection("userTasks")
+        .listDocuments();
+
       for (const userDoc of allUserTasksCollections) {
         try {
           const userTasksRef = userDoc.collection("tasks");
           const taskDoc = await userTasksRef.doc(taskId).get();
-          
+
           if (taskDoc.exists) {
-            console.log(`🗑️ Found additional reference: userTasks/${userDoc.id}/tasks/${taskId}`);
+            console.log(
+              `🗑️ Found additional reference: userTasks/${userDoc.id}/tasks/${taskId}`,
+            );
             deletePromises.push(taskDoc.ref.delete());
             deletedPaths.push(`userTasks/${userDoc.id}/tasks/${taskId}`);
           }
         } catch (err) {
-          console.log(`⚠️ Could not check userTasks for user ${userDoc.id}:`, err.message);
+          console.log(
+            `⚠️ Could not check userTasks for user ${userDoc.id}:`,
+            err.message,
+          );
         }
       }
     } catch (err) {
@@ -280,7 +307,10 @@ async function handleCascadeDelete(req, res, taskId, userId) {
     // 5. Also try collectionGroup query as backup
     try {
       console.log(`🗑️ Running collectionGroup cleanup query`);
-      const allUserTasksQuery = await db.collectionGroup("tasks").where("ref", "==", taskId).get();
+      const allUserTasksQuery = await db
+        .collectionGroup("tasks")
+        .where("ref", "==", taskId)
+        .get();
       allUserTasksQuery.forEach((doc) => {
         console.log(`🗑️ Found collectionGroup reference: ${doc.ref.path}`);
         deletePromises.push(doc.ref.delete());
@@ -293,29 +323,36 @@ async function handleCascadeDelete(req, res, taskId, userId) {
     // Execute all deletions
     console.log(`🗑️ Executing ${deletePromises.length} deletion operations`);
     const results = await Promise.allSettled(deletePromises);
-    
+
     // Check for failures
-    const failures = results.filter(r => r.status === 'rejected');
-    const successes = results.filter(r => r.status === 'fulfilled');
-    
-    console.log(`✅ ${successes.length} deletions successful, ${failures.length} failed`);
-    
+    const failures = results.filter((r) => r.status === "rejected");
+    const successes = results.filter((r) => r.status === "fulfilled");
+
+    console.log(
+      `✅ ${successes.length} deletions successful, ${failures.length} failed`,
+    );
+
     if (failures.length > 0) {
-      console.error(`❌ Deletion failures:`, failures.map(f => f.reason));
+      console.error(
+        `❌ Deletion failures:`,
+        failures.map((f) => f.reason),
+      );
       // Don't fail the entire operation if some deletions fail, as long as the main task is deleted
     }
 
     console.log(`✅ Cascade deletion completed. Deleted paths:`, deletedPaths);
-    return res.json({ 
-      success: true, 
+    return res.json({
+      success: true,
       message: "Task and all shared copies deleted successfully",
       deletedCount: successes.length,
       failedCount: failures.length,
-      deletedPaths: deletedPaths
+      deletedPaths: deletedPaths,
     });
   } catch (error) {
     console.error("❌ Cascade delete error:", error);
-    return res.status(500).json({ error: "Failed to delete task: " + error.message });
+    return res
+      .status(500)
+      .json({ error: "Failed to delete task: " + error.message });
   }
 }
 

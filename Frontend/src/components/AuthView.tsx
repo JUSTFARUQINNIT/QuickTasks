@@ -81,9 +81,7 @@ export function AuthView({ mode }: Props) {
           console.error("Welcome email trigger error:", err);
         }
 
-        setMessage(
-          "Account created. Check your inbox to confirm your email before signing in.",
-        );
+        setMessage("Account created. Check your inbox to confirm your email.");
       }
     } catch (err) {
       const messageText =

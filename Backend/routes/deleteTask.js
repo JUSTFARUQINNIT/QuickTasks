@@ -6,7 +6,8 @@ const router = express.Router();
 
 function chunkArray(items, size) {
   const chunks = [];
-  for (let i = 0; i < items.length; i += size) chunks.push(items.slice(i, i + size));
+  for (let i = 0; i < items.length; i += size)
+    chunks.push(items.slice(i, i + size));
   return chunks;
 }
 
@@ -50,11 +51,15 @@ router.delete("/delete-task/:taskId", requireAuth, async (req, res) => {
       return res.status(400).json({ error: "Task owner is missing" });
     }
     if (ownerId !== authedUid) {
-      return res.status(403).json({ error: "Only task owner can delete this task" });
+      return res
+        .status(403)
+        .json({ error: "Only task owner can delete this task" });
     }
 
     const collaborators = Array.isArray(taskData.collaborators)
-      ? taskData.collaborators.filter((c) => typeof c === "string" && c.length > 0)
+      ? taskData.collaborators.filter(
+          (c) => typeof c === "string" && c.length > 0,
+        )
       : [];
 
     const [invitesSnap, notificationsSnap, commentsSnap] = await Promise.all([
@@ -77,9 +82,17 @@ router.delete("/delete-task/:taskId", requireAuth, async (req, res) => {
 
     const deletes = [
       taskRef,
-      adminDb.collection("userTasks").doc(ownerId).collection("tasks").doc(taskId),
+      adminDb
+        .collection("userTasks")
+        .doc(ownerId)
+        .collection("tasks")
+        .doc(taskId),
       ...collaborators.map((uid) =>
-        adminDb.collection("userTasks").doc(uid).collection("tasks").doc(taskId),
+        adminDb
+          .collection("userTasks")
+          .doc(uid)
+          .collection("tasks")
+          .doc(taskId),
       ),
       ...invitesSnap.docs.map((d) => d.ref),
       ...notificationsSnap.docs.map((d) => d.ref),

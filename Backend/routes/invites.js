@@ -1,25 +1,26 @@
-import express from "express"
-import { mailTransport } from "../utils/mailer.js"
+import express from "express";
+import { mailTransport } from "../utils/mailer.js";
 
-const router = express.Router()
+const router = express.Router();
 
 router.post("/send-task-invite-email", async (req, res) => {
   try {
-    const { email, taskTitle, invitedBy } = req.body ?? {}
+    const { email, taskTitle, invitedBy } = req.body ?? {};
 
     if (!email || !taskTitle || !invitedBy) {
       return res.status(400).json({
         error: "Missing required fields: email, taskTitle, invitedBy",
-      })
+      });
     }
 
     const from =
       process.env.MAIL_FROM ??
-      `QuickTasks <${process.env.MAIL_FROM_EMAIL || process.env.EMAIL_USER || "noreply@quicktasks.local"}>`
-    const appUrl = process.env.APP_URL ?? "https://quick-tasks-ochre.vercel.app/"
+      `QuickTasks <${process.env.MAIL_FROM_EMAIL || process.env.EMAIL_USER || "noreply@quicktasks.local"}>`;
+    const appUrl =
+      process.env.APP_URL ?? "https://quick-tasks-ochre.vercel.app/";
 
-    const safeTaskTitle = String(taskTitle)
-    const safeInvitedBy = String(invitedBy)
+    const safeTaskTitle = String(taskTitle);
+    const safeInvitedBy = String(invitedBy);
 
     const html = `
       <div style="background:#020617;padding:32px 0;font-family:system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;color:#e5e7eb;">
@@ -64,22 +65,21 @@ router.post("/send-task-invite-email", async (req, res) => {
           </tr>
         </table>
       </div>
-    `
+    `;
 
     await mailTransport.sendMail({
       from,
       to: email,
       subject: `QuickTasks: Task invite – ${safeTaskTitle}`,
       html,
-    })
+    });
 
-    return res.json({ ok: true })
+    return res.json({ ok: true });
   } catch (e) {
-    console.error("Failed to send task invite email", e)
-    const message = e instanceof Error ? e.message : String(e)
-    return res.status(500).json({ error: message })
+    console.error("Failed to send task invite email", e);
+    const message = e instanceof Error ? e.message : String(e);
+    return res.status(500).json({ error: message });
   }
-})
+});
 
-export default router
-
+export default router;

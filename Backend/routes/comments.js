@@ -4,66 +4,71 @@ import { requireAuth, requireTaskAccess } from "../utils/authMiddleware.js";
 
 const router = express.Router();
 
-router.get("/:taskId/comments", requireAuth, requireTaskAccess, async (req, res) => {
-  try {
-    const { taskId } = req.params;
+router.get(
+  "/:taskId/comments",
+  requireAuth,
+  requireTaskAccess,
+  async (req, res) => {
+    try {
+      const { taskId } = req.params;
 
-    const snap = await adminDb
-      .collection("task_comments")
-      .where("task_id", "==", taskId)
-      .orderBy("created_at", "asc")
-      .get();
+      const snap = await adminDb
+        .collection("task_comments")
+        .where("task_id", "==", taskId)
+        .orderBy("created_at", "asc")
+        .get();
 
-    if (snap.empty) {
-      return res.json({ ok: true, comments: [] });
-    }
+      if (snap.empty) {
+        return res.json({ ok: true, comments: [] });
+      }
 
-    const comments = [];
-    const userIds = new Set();
+      const comments = [];
+      const userIds = new Set();
 
-    snap.forEach((doc) => {
-      const data = doc.data();
-      comments.push({ id: doc.id, ...data });
-      if (data.user_id) userIds.add(data.user_id);
-    });
-
-    const profilesMap = new Map();
-    if (userIds.size > 0) {
-      const refs = [...userIds].map((uid) =>
-        adminDb.collection("profiles").doc(uid)
-      );
-      const profileSnaps = await adminDb.getAll(...refs);
-      profileSnaps.forEach((pSnap) => {
-        if (!pSnap.exists) return;
-        const data = pSnap.data() || {};
-        profilesMap.set(pSnap.id, {
-          name: data.username || data.name || data.email || "Unknown user",
-          avatarUrl: data.avatarUrl || null,
-        });
+      snap.forEach((doc) => {
+        const data = doc.data();
+        comments.push({ id: doc.id, ...data });
+        if (data.user_id) userIds.add(data.user_id);
       });
+
+      const profilesMap = new Map();
+      if (userIds.size > 0) {
+        const refs = [...userIds].map((uid) =>
+          adminDb.collection("profiles").doc(uid),
+        );
+        const profileSnaps = await adminDb.getAll(...refs);
+        profileSnaps.forEach((pSnap) => {
+          if (!pSnap.exists) return;
+          const data = pSnap.data() || {};
+          profilesMap.set(pSnap.id, {
+            name: data.username || data.name || data.email || "Unknown user",
+            avatarUrl: data.avatarUrl || null,
+          });
+        });
+      }
+
+      const enriched = comments.map((c) => {
+        const profile = profilesMap.get(c.user_id) || {};
+        return {
+          id: c.id,
+          taskId: c.task_id,
+          userId: c.user_id,
+          commentText: c.comment_text,
+          createdAt: c.created_at,
+          user: {
+            name: profile.name || "Unknown user",
+            avatarUrl: profile.avatarUrl,
+          },
+        };
+      });
+
+      return res.json({ ok: true, comments: enriched });
+    } catch (e) {
+      console.error("Fetch comments error:", e);
+      return res.status(500).json({ error: "Failed to load comments" });
     }
-
-    const enriched = comments.map((c) => {
-      const profile = profilesMap.get(c.user_id) || {};
-      return {
-        id: c.id,
-        taskId: c.task_id,
-        userId: c.user_id,
-        commentText: c.comment_text,
-        createdAt: c.created_at,
-        user: {
-          name: profile.name || "Unknown user",
-          avatarUrl: profile.avatarUrl,
-        },
-      };
-    });
-
-    return res.json({ ok: true, comments: enriched });
-  } catch (e) {
-    console.error("Fetch comments error:", e);
-    return res.status(500).json({ error: "Failed to load comments" });
-  }
-});
+  },
+);
 
 router.post(
   "/:taskId/comments",
@@ -103,8 +108,7 @@ router.post(
       console.error("Create comment error:", e);
       return res.status(500).json({ error: "Failed to create comment" });
     }
-  }
+  },
 );
 
 export default router;
-

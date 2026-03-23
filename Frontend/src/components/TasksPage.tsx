@@ -97,43 +97,54 @@ export function TasksPage({ mode = "both" }: TasksPageProps) {
     const tasksRef = collection(db, "tasks");
 
     const ownerQuery = query(tasksRef, where("user_id", "==", user.uid));
-    
+
     // Also query for tasks where user is a collaborator (to catch any tasks that might be structured differently)
     let collaboratorSnap;
     try {
-      collaboratorSnap = await getDocs(query(tasksRef, where("collaborators", "array-contains", user.uid)));
+      collaboratorSnap = await getDocs(
+        query(tasksRef, where("collaborators", "array-contains", user.uid)),
+      );
     } catch (collabError) {
       console.warn("Collaborator query failed, using fallback:", collabError);
       collaboratorSnap = { docs: [] }; // Empty fallback
     }
-    
+
     // Also query for shared tasks where user is a collaborator (accepted invitations)
     let sharedSnap;
     try {
       // First try to get tasks where user is explicitly in collaborators array
-      const collaboratorSharedQuery = query(tasksRef, 
+      const collaboratorSharedQuery = query(
+        tasksRef,
         where("shared", "==", true),
-        where("collaborators", "array-contains", user.uid)
+        where("collaborators", "array-contains", user.uid),
       );
       sharedSnap = await getDocs(collaboratorSharedQuery);
     } catch (sharedError) {
       console.warn("Shared query failed, using fallback:", sharedError);
-      
+
       // Alternative approach: Get all shared tasks and filter for ones where user is in collaborators
       try {
-        const allSharedTasksQuery = query(tasksRef, where("shared", "==", true));
+        const allSharedTasksQuery = query(
+          tasksRef,
+          where("shared", "==", true),
+        );
         const allSharedTasks = await getDocs(allSharedTasksQuery);
-        
+
         // Filter for shared tasks where user is explicitly in collaborators
-        const sharedWithUser = allSharedTasks.docs.filter(doc => {
+        const sharedWithUser = allSharedTasks.docs.filter((doc) => {
           const data = doc.data();
-          return data.collaborators && 
-                 Array.isArray(data.collaborators) && 
-                 data.collaborators.includes(user.uid);
+          return (
+            data.collaborators &&
+            Array.isArray(data.collaborators) &&
+            data.collaborators.includes(user.uid)
+          );
         });
-        
+
         sharedSnap = { docs: sharedWithUser };
-        console.log("✅ Alternative shared query found tasks where user is collaborator:", sharedWithUser.length);
+        console.log(
+          "✅ Alternative shared query found tasks where user is collaborator:",
+          sharedWithUser.length,
+        );
       } catch (altError) {
         console.warn("Alternative shared query also failed:", altError);
         sharedSnap = { docs: [] }; // Empty fallback
@@ -181,8 +192,13 @@ export function TasksPage({ mode = "both" }: TasksPageProps) {
           }
         } catch (err) {
           // Handle permission errors gracefully - use invited data instead
-          if (err instanceof Error && err.message.includes('Missing or insufficient permissions')) {
-            console.log(`Permission denied for master task ${masterId}, using invited data`);
+          if (
+            err instanceof Error &&
+            err.message.includes("Missing or insufficient permissions")
+          ) {
+            console.log(
+              `Permission denied for master task ${masterId}, using invited data`,
+            );
           } else {
             console.warn(
               `Could not fetch master task ${masterId}, using invited data:`,
@@ -210,37 +226,41 @@ export function TasksPage({ mode = "both" }: TasksPageProps) {
     );
 
     // Process collaborator query results
-        const collaboratorTasks = collaboratorSnap.docs.map((doc) => ({ 
-          id: doc.id, 
-          data: doc.data()
-        }));
+    const collaboratorTasks = collaboratorSnap.docs.map((doc) => ({
+      id: doc.id,
+      data: doc.data(),
+    }));
 
-        console.log("TasksPage query results:", {
-          ownerTasks: ownerSnap.docs.length,
-          collaboratorTasks: collaboratorSnap.docs.length,
-          sharedTasks: sharedSnap.docs.length,
-          invitedTasks: invitedSnap.docs.length,
-          totalTasks: ownerSnap.docs.length + collaboratorSnap.docs.length + sharedSnap.docs.length + invitedSnap.docs.length
-        });
+    console.log("TasksPage query results:", {
+      ownerTasks: ownerSnap.docs.length,
+      collaboratorTasks: collaboratorSnap.docs.length,
+      sharedTasks: sharedSnap.docs.length,
+      invitedTasks: invitedSnap.docs.length,
+      totalTasks:
+        ownerSnap.docs.length +
+        collaboratorSnap.docs.length +
+        sharedSnap.docs.length +
+        invitedSnap.docs.length,
+    });
 
-        // Process shared query results
-        const sharedTasks = sharedSnap.docs.map((doc) => ({ 
-          id: doc.id, 
-          data: doc.data()
-        }));
+    // Process shared query results
+    const sharedTasks = sharedSnap.docs.map((doc) => ({
+      id: doc.id,
+      data: doc.data(),
+    }));
 
-        // Combine all task data - ensure consistent { id, data } structure
-        const allTasks = [
-          ...ownerSnap.docs.map((doc) => ({ id: doc.id, data: doc.data() })),
-          ...collaboratorTasks,
-          ...sharedTasks,
-          ...invitedTasks,
-        ];
+    // Combine all task data - ensure consistent { id, data } structure
+    const allTasks = [
+      ...ownerSnap.docs.map((doc) => ({ id: doc.id, data: doc.data() })),
+      ...collaboratorTasks,
+      ...sharedTasks,
+      ...invitedTasks,
+    ];
 
-        // Remove duplicates (tasks might appear in multiple queries)
-        const uniqueTasks = allTasks.filter((task, index, self) => 
-          index === self.findIndex((t) => t.id === task.id)
-        );
+    // Remove duplicates (tasks might appear in multiple queries)
+    const uniqueTasks = allTasks.filter(
+      (task, index, self) => index === self.findIndex((t) => t.id === task.id),
+    );
 
     // Sort by order field, treating missing/invalid order as large number
     const sortedTasks = uniqueTasks.sort((a, b) => {
@@ -355,27 +375,29 @@ export function TasksPage({ mode = "both" }: TasksPageProps) {
         // Process initial data
         const taskData = fetchedTasks
           .map((task: any): Task | null => {
-          try {
-            const { id, data } = task;
-            if (!data) {
-              console.warn("Task with undefined data:", task);
+            try {
+              const { id, data } = task;
+              if (!data) {
+                console.warn("Task with undefined data:", task);
+                return null;
+              }
+              const ownerId =
+                typeof data.user_id === "string"
+                  ? (data.user_id as string)
+                  : null;
+              const isInvited = data.isInvited === true;
+              return {
+                id,
+                ...(data as Omit<Task, "id">),
+                shared: ownerId !== user.uid,
+                ownerId: ownerId,
+                isInvited,
+                ref: (data.ref as string | undefined) ?? id,
+              };
+            } catch (error) {
+              console.warn("Error processing task:", task, error);
               return null;
             }
-            const ownerId =
-              typeof data.user_id === "string" ? (data.user_id as string) : null;
-            const isInvited = data.isInvited === true;
-            return {
-              id,
-              ...(data as Omit<Task, "id">),
-              shared: ownerId !== user.uid,
-              ownerId: ownerId,
-              isInvited,
-              ref: (data.ref as string | undefined) ?? id,
-            };
-          } catch (error) {
-            console.warn("Error processing task:", task, error);
-            return null;
-          }
           })
           .filter((t): t is Task => t !== null);
 
@@ -874,7 +896,7 @@ export function TasksPage({ mode = "both" }: TasksPageProps) {
       // Optimistically update UI
       setTasks((prev) => prev.filter((t) => t.id !== task.id));
       setSelectedTask((prev) => (prev && prev.id === task.id ? null : prev));
-      
+
       if (!navigator.onLine) {
         enqueueOfflineAction({ type: "delete", payload: { id: deleteId } });
       } else {
@@ -1177,7 +1199,7 @@ export function TasksPage({ mode = "both" }: TasksPageProps) {
                       <th>Title</th>
                       <th>Category</th>
                       <th>Due Date</th>
-                      <th>Priority</th>
+                      {/* <th>Priority</th> */}
                       <th>Status</th>
                     </tr>
                   </thead>
@@ -1200,7 +1222,7 @@ export function TasksPage({ mode = "both" }: TasksPageProps) {
                       const totalSubtasks = subtasks.length;
                       const hasActiveProgress =
                         totalSubtasks > 0 && completedSubtasks > 0;
-                      
+
                       // Enhanced status calculation based on task completion, subtask progress, and due date
                       let statusLabel = "Pending";
                       const isCompleted = calculateTaskCompletion(task);
@@ -1243,7 +1265,7 @@ export function TasksPage({ mode = "both" }: TasksPageProps) {
                                 )
                               : "—"}
                           </td>
-                          <td>
+                          {/* <td>
                             {task.priority && (
                               <span
                                 className={`task-pill task-pill--${task.priority}`}
@@ -1251,7 +1273,7 @@ export function TasksPage({ mode = "both" }: TasksPageProps) {
                                 {task.priority}
                               </span>
                             )}
-                          </td>
+                          </td> */}
                           <td>
                             <span
                               className={`task-status task-status--${
@@ -1306,7 +1328,7 @@ export function TasksPage({ mode = "both" }: TasksPageProps) {
                       const totalSubtasks = subtasks.length;
                       const hasActiveProgress =
                         totalSubtasks > 0 && completedSubtasks > 0;
-                      
+
                       // Enhanced status calculation based on task completion, subtask progress, and due date
                       let statusLabel = "Pending";
                       const isCompleted = calculateTaskCompletion(task);

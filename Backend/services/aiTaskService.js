@@ -114,9 +114,7 @@ export async function predictTaskPatterns(userId) {
   for (const [key, tasks] of byTitleKey) {
     if (tasks.length < 3) continue;
     const dates = tasks
-      .map((t) =>
-        new Date(t.created_at || t.due_date || t.completed_at || "")
-      )
+      .map((t) => new Date(t.created_at || t.due_date || t.completed_at || ""))
       .filter((d) => !Number.isNaN(d.getTime()))
       .sort((a, b) => a.getTime() - b.getTime());
     if (dates.length < 3) continue;
@@ -124,8 +122,7 @@ export async function predictTaskPatterns(userId) {
     const intervals = [];
     for (let i = 1; i < dates.length; i += 1) {
       const diffDays =
-        (dates[i].getTime() - dates[i - 1].getTime()) /
-        (1000 * 60 * 60 * 24);
+        (dates[i].getTime() - dates[i - 1].getTime()) / (1000 * 60 * 60 * 24);
       intervals.push(diffDays);
     }
 
@@ -149,8 +146,7 @@ export async function predictTaskPatterns(userId) {
     if (Number.isNaN(created.getTime()) || Number.isNaN(done.getTime())) {
       continue;
     }
-    const days =
-      (done.getTime() - created.getTime()) / (1000 * 60 * 60 * 24);
+    const days = (done.getTime() - created.getTime()) / (1000 * 60 * 60 * 24);
     if (days >= 0 && days < 180) {
       totalDuration += days;
       durationCount += 1;
@@ -174,4 +170,3 @@ export async function predictTaskPatterns(userId) {
       : null,
   };
 }
-

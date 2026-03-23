@@ -1454,20 +1454,39 @@
   padding: 2px 8px;
   font-size: 0.72rem;
 }
+.task-status-badge {
+    padding: 4px 12px;
+    border-radius: 5px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
 
-.task-status--completed {
+.task-status--completed, .task-status-completed {
   background: rgba(34, 197, 94, 0.1);
   color: #bbf7d0;
 }
 
-.task-status--pending {
+.task-status--pending, .task-status-pending {
   background: rgba(59, 130, 246, 0.08);
   color: #bfdbfe;
 }
 
-.task-status--overdue {
+.task-status--overdue, .task-status-overdue {
   background: rgba(248, 113, 113, 0.1);
   color: #fecaca;
+}
+.task-status-in--progress, .task-status-in-progress {
+  background: rgba(251, 191, 36, 0.15);
+  color: #fde047;
+}
+
+.status-priority{
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  margin-bottom: 10px;
 }
 
 .tasks-card-list {
