@@ -4,8 +4,9 @@ import {
   query,
   where,
   getDocs,
-  addDoc,
   serverTimestamp,
+  doc,
+  runTransaction,
 } from "firebase/firestore";
 import { auth, db } from "../lib/firebaseClient";
 import { NotificationBanner } from "./NotificationBanner";
@@ -25,6 +26,28 @@ export function InviteCollaboratorModal({
   const [loading, setLoading] = useState(false);
   const { notification, showSuccessNotification, showErrorNotification } =
     useNotification();
+
+  async function findExistingInviteStatus(
+    taskId: string,
+    invitedEmail: string,
+  ): Promise<null | { status: string }> {
+    const existingInvitesQuery = query(
+      collection(db, "taskInvites"),
+      where("taskId", "==", taskId),
+      where("invitedEmail", "==", invitedEmail),
+    );
+
+    const snap = await getDocs(existingInvitesQuery);
+    if (snap.empty) return null;
+
+    const data = snap.docs[0].data() as { status?: string };
+    return { status: typeof data.status === "string" ? data.status : "" };
+  }
+
+  function getDeterministicInviteDocId(taskId: string, invitedEmail: string) {
+    // Encode email to keep docId deterministic & safe under special characters.
+    return `${taskId}_${encodeURIComponent(invitedEmail)}`;
+  }
 
 
   async function handleSubmit(e: FormEvent) {
@@ -58,16 +81,61 @@ export function InviteCollaboratorModal({
       const invitedUserDoc = snap.docs[0];
       const invitedUserId = invitedUserDoc.id;
 
-      await addDoc(collection(db, "taskInvites"), {
-        taskId: task.id,
-        taskTitle: task.title,
-        invitedEmail: trimmedEmail,
-        invitedUserId,
-        invitedBy: currentUser.uid,
-        invitedByEmail: currentUser.email,
-        status: "pending",
-        createdAt: serverTimestamp(),
+      // 1) Check for an existing invite with the same {taskId, invitedEmail}.
+      const existing = await findExistingInviteStatus(task.id, trimmedEmail);
+      if (existing) {
+        if (existing.status === "pending") {
+          showErrorNotification("An invitation has already been sent.");
+          return;
+        }
+        if (existing.status === "accepted") {
+          showErrorNotification("User is already a collaborator.");
+          return;
+        }
+        showErrorNotification("An invitation already exists.");
+        return;
+      }
+
+      // 2) Create with a deterministic document ID to avoid duplicates under race conditions.
+      const inviteDocId = getDeterministicInviteDocId(task.id, trimmedEmail);
+      const inviteRef = doc(db, "taskInvites", inviteDocId);
+
+      const txnResult = await runTransaction(db, async (tx) => {
+        const existingSnap = await tx.get(inviteRef);
+        if (existingSnap.exists()) {
+          const data = existingSnap.data() as { status?: string };
+          return {
+            created: false,
+            status: typeof data.status === "string" ? data.status : "",
+          };
+        }
+
+        tx.set(inviteRef, {
+          taskId: task.id,
+          taskTitle: task.title,
+          invitedEmail: trimmedEmail,
+          invitedUserId,
+          invitedBy: currentUser.uid,
+          invitedByEmail: currentUser.email,
+          status: "pending",
+          createdAt: serverTimestamp(),
+        });
+
+        return { created: true, status: "pending" };
       });
+
+      if (!txnResult.created) {
+        if (txnResult.status === "pending") {
+          showErrorNotification("An invitation has already been sent.");
+          return;
+        }
+        if (txnResult.status === "accepted") {
+          showErrorNotification("User is already a collaborator.");
+          return;
+        }
+        showErrorNotification("An invitation already exists.");
+        return;
+      }
 
       const rawBase =
         (import.meta.env.VITE_API_URL as string | undefined) ?? "";
