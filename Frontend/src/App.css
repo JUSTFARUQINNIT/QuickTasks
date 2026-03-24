@@ -2340,6 +2340,7 @@
   display: flex;
   align-items: center;
   gap: 12px;
+  flex-wrap: wrap;
 }
 .task-file-item {
   display: flex;
@@ -2359,8 +2360,8 @@
 }
 
 .task-file-icon {
-  width: 24px;
-  height: 24px;
+  /* width: 50px; */
+  /* height: 50px; */
   display: flex;
   align-items: center;
   justify-content: center;
@@ -2727,6 +2728,21 @@
 
 .profile-modal-btn.primary:hover {
   background: rgba(120, 217, 87, 0.9);
+}
+
+.profile-modal-btn.danger {
+  background: rgba(239, 68, 68, 0.2);
+  color: #fecaca;
+  border-color: rgba(239, 68, 68, 0.45);
+}
+
+.profile-modal-btn.danger:hover {
+  background: rgba(239, 68, 68, 0.3);
+}
+
+.profile-modal-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 
 /* Shared Task Indicator */

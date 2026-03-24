@@ -1,7 +1,11 @@
 import { auth, db } from "../../lib/firebaseClient";
 import type { Attachment, Task } from "../../types/tasks";
 import { calculateTaskCompletion } from "../../utils/taskCompletion";
-import { deleteTaskAttachment, uploadTaskAttachment } from "../../api/tasks";
+import {
+  deleteTaskAttachment,
+  removeTaskCollaborator,
+  uploadTaskAttachment,
+} from "../../api/tasks";
 import { NotificationBanner } from "../NotificationBanner";
 import { useNotification } from "../../hooks/useNotification";
 import { TaskHeader } from "./TaskHeader";
@@ -78,6 +82,9 @@ export function TaskDetailsScreen({
     null,
   );
   const [fileToDeleteId, setFileToDeleteId] = useState<string | null>(null);
+  const [removingCollaboratorId, setRemovingCollaboratorId] = useState<
+    string | null
+  >(null);
   const { notification, showSuccessNotification, showErrorNotification } =
     useNotification();
 
@@ -507,6 +514,31 @@ export function TaskDetailsScreen({
     setSelectedProfile(null);
   };
 
+  const handleRemoveCollaborator = async (collaboratorId: string) => {
+    if (!isOwner) {
+      showErrorNotification("Only the task owner can remove collaborators.");
+      return;
+    }
+
+    const taskIdForRemoval = currentTask.ref || currentTask.id || task.id;
+    if (!taskIdForRemoval) {
+      showErrorNotification("Task ID is missing.");
+      return;
+    }
+
+    setRemovingCollaboratorId(collaboratorId);
+    try {
+      await removeTaskCollaborator(taskIdForRemoval, collaboratorId);
+      showSuccessNotification("Collaborator removed successfully.");
+      closeProfileModal();
+    } catch (error) {
+      console.error("Error removing collaborator:", error);
+      showErrorNotification("Failed to remove collaborator. Please try again.");
+    } finally {
+      setRemovingCollaboratorId(null);
+    }
+  };
+
   const calculateProgress = () => {
     if (subtasks.length === 0) return 0;
     const completedCount = subtasks.filter((st) => st.completed).length;
@@ -856,20 +888,11 @@ export function TaskDetailsScreen({
                     >
                       <div
                         className="task-file-icon"
-                        style={{
-                          width: "24px",
-                          height: "24px",
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "center",
-                        }}
                       >
                         <img
                           src={displayIcon}
                           alt="file icon"
-                          width={24}
-                          height={24}
-                          style={{ borderRadius: "4px", objectFit: "cover" }}
+                          
                         />
                       </div>
                       <div className="task-file-info">
@@ -1195,6 +1218,15 @@ export function TaskDetailsScreen({
         isOpen={profileModalOpen}
         onClose={closeProfileModal}
         profile={selectedProfile}
+        canRemoveCollaborator={
+          !!selectedProfile &&
+          isOwner &&
+          selectedProfile.role.toLowerCase() === "collaborator"
+        }
+        isRemovingCollaborator={
+          !!selectedProfile && removingCollaboratorId === selectedProfile.id
+        }
+        onRemoveCollaborator={handleRemoveCollaborator}
       />
 
       {/* Delete Confirmation Modal */}

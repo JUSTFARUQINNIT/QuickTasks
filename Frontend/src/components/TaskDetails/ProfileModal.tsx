@@ -1,8 +1,11 @@
-import { HiXMark, HiEnvelope } from "react-icons/hi2";
+import { HiXMark, HiEnvelope, HiUserMinus } from "react-icons/hi2";
 
 type ProfileModalProps = {
   isOpen: boolean;
   onClose: () => void;
+  canRemoveCollaborator?: boolean;
+  isRemovingCollaborator?: boolean;
+  onRemoveCollaborator?: (userId: string) => void;
   profile: {
     id: string;
     name: string;
@@ -13,7 +16,14 @@ type ProfileModalProps = {
   } | null;
 };
 
-export function ProfileModal({ isOpen, onClose, profile }: ProfileModalProps) {
+export function ProfileModal({
+  isOpen,
+  onClose,
+  profile,
+  canRemoveCollaborator = false,
+  isRemovingCollaborator = false,
+  onRemoveCollaborator,
+}: ProfileModalProps) {
   if (!isOpen || !profile) return null;
 
   const getInitials = (name: string) => {
@@ -72,6 +82,18 @@ export function ProfileModal({ isOpen, onClose, profile }: ProfileModalProps) {
             <HiEnvelope style={{ marginRight: "8px" }} />
             Send Email
           </button>
+          {canRemoveCollaborator && onRemoveCollaborator && (
+            <button
+              className="profile-modal-btn danger"
+              onClick={() => onRemoveCollaborator(profile.id)}
+              disabled={isRemovingCollaborator}
+            >
+              <HiUserMinus style={{ marginRight: "8px" }} />
+              {isRemovingCollaborator
+                ? "Removing..."
+                : "Remove Collaborator"}
+            </button>
+          )}
         </div>
       </div>
     </div>

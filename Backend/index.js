@@ -11,6 +11,7 @@ import calendarRoutes from "./routes/calendar.js";
 import taskManagerRoutes from "./routes/taskManager.js";
 import deleteTaskRoutes from "./routes/deleteTask.js";
 import taskAttachmentRoutes from "./routes/taskAttachments.js";
+import taskCollaboratorRoutes from "./routes/taskCollaborators.js";
 
 const app = express();
 
@@ -32,6 +33,7 @@ app.use("/api/reminders", reminderRoutes);
 app.use("/api/tasks", commentRoutes);
 app.use("/api/tasks", aiTaskRoutes);
 app.use("/api/tasks", taskAttachmentRoutes);
+app.use("/api/tasks", taskCollaboratorRoutes);
 app.use("/api/tasks/:taskId", taskManagerRoutes);
 app.use("/api/calendar", calendarRoutes);
 app.use("/", deleteTaskRoutes);

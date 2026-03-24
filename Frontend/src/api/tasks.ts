@@ -124,3 +124,27 @@ export async function deleteTaskAttachment(
   }
 }
 
+export async function removeTaskCollaborator(
+  taskId: string,
+  collaboratorId: string,
+): Promise<void> {
+  const user = auth.currentUser;
+  if (!user) throw new Error("Authentication required");
+
+  const token = await user.getIdToken();
+  const res = await fetch(
+    `${getApiBaseUrl()}/api/tasks/${encodeURIComponent(taskId)}/collaborators/${encodeURIComponent(collaboratorId)}`,
+    {
+      method: "DELETE",
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    },
+  );
+
+  const body = await res.json().catch(() => null);
+  if (!res.ok) {
+    throw new Error(body?.error || `Failed to remove collaborator (${res.status})`);
+  }
+}
+
