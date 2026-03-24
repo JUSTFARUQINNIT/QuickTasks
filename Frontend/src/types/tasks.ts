@@ -14,14 +14,21 @@ export type Subtask = {
 
 export type Attachment = {
   id: string;
-  name: string;
-  type: string;
-  size: number;
+  taskId?: string;
+  originalName?: string;
+  uniqueName?: string;
+  uploadedBy?: string;
+  driveFileId?: string | null;
+  createdAt?: string;
+  name?: string; // legacy field
+  type?: string;
+  size?: number;
   url: string;
-  view_url?: string | null;
-  drive_file_id?: string | null;
-  uploaded_by: string;
-  uploaded_at: string;
+  viewUrl?: string | null;
+  view_url?: string | null; // legacy field
+  drive_file_id?: string | null; // legacy field
+  uploaded_by?: string; // legacy field
+  uploaded_at?: string; // legacy field
 };
 
 export type Task = {

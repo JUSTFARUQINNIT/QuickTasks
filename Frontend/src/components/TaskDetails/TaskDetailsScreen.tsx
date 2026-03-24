@@ -1,7 +1,7 @@
 import { auth, db } from "../../lib/firebaseClient";
-import type { Task } from "../../types/tasks";
+import type { Attachment, Task } from "../../types/tasks";
 import { calculateTaskCompletion } from "../../utils/taskCompletion";
-import { uploadTaskAttachment } from "../../api/tasks";
+import { deleteTaskAttachment, uploadTaskAttachment } from "../../api/tasks";
 import { NotificationBanner } from "../NotificationBanner";
 import { useNotification } from "../../hooks/useNotification";
 import { TaskHeader } from "./TaskHeader";
@@ -169,6 +169,21 @@ export function TaskDetailsScreen({
 
   // Use real attachments from database or empty array
   const attachments = currentTask.attachments || [];
+
+  function canDeleteFile(
+    user: { id: string } | null,
+    taskData: { ownerId?: string | null },
+    file: { uploadedBy?: string | null },
+  ) {
+    if (!user?.id) return false;
+    return user.id === taskData.ownerId || user.id === file.uploadedBy;
+  }
+
+  const getAttachmentDisplayName = (attachment: Attachment) =>
+    attachment.originalName || attachment.name || "Unnamed file";
+
+  const getAttachmentUploadedBy = (attachment: Attachment) =>
+    attachment.uploadedBy || attachment.uploaded_by || null;
 
   // Load profile data for collaborators and owner
   useEffect(() => {
@@ -439,7 +454,7 @@ export function TaskDetailsScreen({
     const link = document.createElement("a");
     link.href = attachment.url;
     link.target = "_blank";
-    link.download = attachment.name;
+    link.download = getAttachmentDisplayName(attachment);
     link.style.display = "none";
     document.body.appendChild(link);
     link.click();
@@ -447,19 +462,28 @@ export function TaskDetailsScreen({
   };
 
   const deleteFile = async (attachmentId: string) => {
-    if (!isOwner) {
-      showErrorNotification("Only the task owner can delete files.");
+    const currentUser = auth.currentUser;
+    const targetAttachment = attachments.find((att) => att.id === attachmentId);
+    const isAllowed = canDeleteFile(
+      currentUser ? { id: currentUser.uid } : null,
+      { ownerId: currentTask.ownerId || null },
+      { uploadedBy: targetAttachment ? getAttachmentUploadedBy(targetAttachment) : null },
+    );
+
+    if (!isAllowed) {
+      showErrorNotification("Only the task owner or file uploader can delete files.");
       return;
     }
 
     if (!confirm("Are you sure you want to delete this file?")) return;
 
     try {
-      const taskRef = doc(db, "tasks", currentTask.id);
-      const updatedAttachments = attachments.filter(
-        (att) => att.id !== attachmentId,
-      );
-      await updateDoc(taskRef, { attachments: updatedAttachments });
+      const deleteTaskId = currentTask.ref || currentTask.id || task.id;
+      if (!deleteTaskId) {
+        throw new Error("Task ID is missing");
+      }
+      await deleteTaskAttachment(deleteTaskId, attachmentId);
+      showSuccessNotification("File deleted successfully.");
     } catch (error) {
       console.error("Error deleting file:", error);
       showErrorNotification("Failed to delete file. Please try again.");
@@ -818,8 +842,15 @@ export function TaskDetailsScreen({
                 </div>
               ) : (
                 attachments.map((attachment) => {
-                  const fileIcon = getFileTypeIcon(attachment.name);
+                  const displayName = getAttachmentDisplayName(attachment);
+                  const fileIcon = getFileTypeIcon(displayName);
                   const IconComponent = fileIcon.icon;
+                  const currentUser = auth.currentUser;
+                  const showDeleteButton = canDeleteFile(
+                    currentUser ? { id: currentUser.uid } : null,
+                    { ownerId: currentTask.ownerId || null },
+                    { uploadedBy: getAttachmentUploadedBy(attachment) },
+                  );
                   return (
                     <div
                       key={attachment.id}
@@ -834,10 +865,10 @@ export function TaskDetailsScreen({
                         <IconComponent />
                       </div>
                       <div className="task-file-info">
-                        <div className="task-file-name">{attachment.name}</div>
+                        <div className="task-file-name">{displayName}</div>
                         <div className="task-file-meta">
                           <span className="task-file-size">
-                            {(attachment.size / 1024).toFixed(1)} KB
+                            {((attachment.size || 0) / 1024).toFixed(1)} KB
                           </span>
                           <span className="task-file-type">
                             {fileIcon.label}
@@ -855,7 +886,7 @@ export function TaskDetailsScreen({
                         >
                           <HiArrowDownTray />
                         </button>
-                        {isOwner && (
+                        {showDeleteButton && (
                           <>
                             <button
                               className="task-file-action-btn delete"

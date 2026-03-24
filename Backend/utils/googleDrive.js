@@ -174,3 +174,17 @@ export async function uploadBufferToGoogleDrive({
     throw error;
   }
 }
+
+export async function deleteGoogleDriveFile(driveFileId) {
+  if (!driveFileId) {
+    throw new Error("driveFileId is required");
+  }
+
+  const auth = createAuthClient();
+  const drive = google.drive({ version: "v3", auth });
+
+  await drive.files.delete({
+    fileId: driveFileId,
+    supportsAllDrives: true,
+  });
+}
