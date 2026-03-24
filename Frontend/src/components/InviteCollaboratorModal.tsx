@@ -6,7 +6,9 @@ import {
   getDocs,
   serverTimestamp,
   doc,
+  getDoc,
   runTransaction,
+  updateDoc,
 } from "firebase/firestore";
 import { auth, db } from "../lib/firebaseClient";
 import { NotificationBanner } from "./NotificationBanner";
@@ -27,128 +29,122 @@ export function InviteCollaboratorModal({
   const { notification, showSuccessNotification, showErrorNotification } =
     useNotification();
 
-  async function findExistingInviteStatus(
-    taskId: string,
-    invitedEmail: string,
-  ): Promise<null | { status: string }> {
-    const existingInvitesQuery = query(
-      collection(db, "taskInvites"),
-      where("taskId", "==", taskId),
-      where("invitedEmail", "==", invitedEmail),
-    );
+  // async function findExistingInviteStatus(
+  //   taskId: string,
+  //   invitedEmail: string,
+  // ): Promise<null | { status: string }> {
+  //   const existingInvitesQuery = query(
+  //     collection(db, "taskInvites"),
+  //     where("taskId", "==", taskId),
+  //     where("invitedEmail", "==", invitedEmail),
+  //   );
 
-    const snap = await getDocs(existingInvitesQuery);
-    if (snap.empty) return null;
+  //   const snap = await getDocs(existingInvitesQuery);
+  //   if (snap.empty) return null;
 
-    const data = snap.docs[0].data() as { status?: string };
-    return { status: typeof data.status === "string" ? data.status : "" };
+  //   const data = snap.docs[0].data() as { status?: string };
+  //   return { status: typeof data.status === "string" ? data.status : "" };
+  // }
+
+  // function getDeterministicInviteDocId(taskId: string, invitedEmail: string) {
+  //   // Encode email to keep docId deterministic & safe under special characters.
+  //   return `${taskId}_${encodeURIComponent(invitedEmail)}`;
+  // }
+
+async function handleSubmit(e: FormEvent) {
+  e.preventDefault();
+
+  const trimmedEmail = email.trim().toLowerCase();
+  if (!trimmedEmail) {
+    showErrorNotification("Email is required.");
+    return;
   }
 
-  function getDeterministicInviteDocId(taskId: string, invitedEmail: string) {
-    // Encode email to keep docId deterministic & safe under special characters.
-    return `${taskId}_${encodeURIComponent(invitedEmail)}`;
-  }
+  try {
+    const currentUser = auth.currentUser;
+    if (!currentUser || !currentUser.email) {
+      throw new Error("You must be signed in to send invitations.");
+    }
 
+    setLoading(true);
 
-  async function handleSubmit(e: FormEvent) {
-    e.preventDefault();
+    // 1️⃣ Fetch user by email
+    const usersRef = collection(db, "profiles");
+    const q = query(usersRef, where("email", "==", trimmedEmail));
+    const snap = await getDocs(q);
 
-    const trimmedEmail = email.trim().toLowerCase();
-    if (!trimmedEmail) {
-      const msg = "Email is required.";
-      showErrorNotification(msg);
+    if (snap.empty) {
+      showErrorNotification("User not found.");
       return;
     }
 
-    try {
-      const currentUser = auth.currentUser;
-      if (!currentUser || !currentUser.email) {
-        throw new Error("You must be signed in to send invitations.");
-      }
+    const invitedUserDoc = snap.docs[0];
+    const invitedUserId = invitedUserDoc.id;
 
-      setLoading(true);
+    // 2️⃣ Fetch task and check current collaborators
+    const taskRef = doc(db, "tasks", task.id);
+    const taskSnap = await getDoc(taskRef); // ✅ Modular v9 syntax
+    const taskData = taskSnap.data() || {};
+    const collaborators: string[] = Array.isArray(taskData.collaborators)
+      ? taskData.collaborators
+      : [];
 
-       // 1 Fetch the user profile by email
-      const usersRef = collection(db, "profiles");
-      const q = query(usersRef, where("email", "==", trimmedEmail));
-      const snap = await getDocs(q);
+    if (collaborators.includes(invitedUserId)) {
+      showErrorNotification("User is already a collaborator.");
+      return;
+    }
 
-      if (snap.empty) {
-        const msg = "User not found";
-        showErrorNotification(msg);
-        return;
-      }
+    // 3️⃣ Check for existing invite
+    const existingInvitesQuery = query(
+      collection(db, "taskInvites"),
+      where("taskId", "==", task.id),
+      where("invitedEmail", "==", trimmedEmail)
+    );
+    const inviteSnap = await getDocs(existingInvitesQuery);
 
-      const invitedUserDoc = snap.docs[0];
-      const invitedUserId = invitedUserDoc.id;
+    if (!inviteSnap.empty) {
+  const existingDoc = inviteSnap.docs[0];
+  const existingStatus = existingDoc.data().status;
 
-        // 2 Check if user is already a collaborator
-        const taskRef = doc(db, "tasks", task.id);
-        const taskSnap = await taskRef.get();
-        const taskData = taskSnap.data() || {};
-        const collaborators: string[] = Array.isArray(taskData.collaborators)
-          ? taskData.collaborators
-          : [];
-          if (collaborators) {
-            
-          }
-
-      // 2) Check for an existing invite with the same {taskId, invitedEmail}.
-      const existing = await findExistingInviteStatus(task.id, trimmedEmail);
-      if (existing) {
-        if (existing.status === "pending") {
-          showErrorNotification("An invitation has already been sent.");
-          return;
-        }
-        if (existing.status === "accepted") {
-          showErrorNotification("User is already a collaborator.");
-          return;
-        }
-        showErrorNotification("An invitation already exists.");
-        return;
-      }
-
-      // 2) Create with a deterministic document ID to avoid duplicates under race conditions.
-      const inviteDocId = getDeterministicInviteDocId(task.id, trimmedEmail);
+  if (existingStatus === "pending") {
+    showErrorNotification("An invitation has already been sent.");
+    return;
+  }
+  if (existingStatus === "accepted") {
+    showErrorNotification("User is already a collaborator.");
+    return;
+  }
+  if (existingStatus === "declined") {
+    // Use modular v9 syntax to update
+    const docRef = doc(db, "taskInvites", existingDoc.id);
+    await updateDoc(docRef, {
+      status: "pending",
+      invitedBy: currentUser.uid,
+      invitedByEmail: currentUser.email,
+      createdAt: serverTimestamp(),
+    });
+  }
+}else {
+      // 4️⃣ No existing invite → create new invite
+      const inviteDocId = `${task.id}_${encodeURIComponent(trimmedEmail)}`;
       const inviteRef = doc(db, "taskInvites", inviteDocId);
 
-      const txnResult = await runTransaction(db, async (tx) => {
+      await runTransaction(db, async (tx) => {
         const existingSnap = await tx.get(inviteRef);
-        if (existingSnap.exists()) {
-          const data = existingSnap.data() as { status?: string };
-          return {
-            created: false,
-            status: typeof data.status === "string" ? data.status : "",
-          };
+        if (!existingSnap.exists()) {
+          tx.set(inviteRef, {
+            taskId: task.id,
+            taskTitle: task.title,
+            invitedEmail: trimmedEmail,
+            invitedUserId,
+            invitedBy: currentUser.uid,
+            invitedByEmail: currentUser.email,
+            status: "pending",
+            createdAt: serverTimestamp(),
+          });
         }
-
-        tx.set(inviteRef, {
-          taskId: task.id,
-          taskTitle: task.title,
-          invitedEmail: trimmedEmail,
-          invitedUserId,
-          invitedBy: currentUser.uid,
-          invitedByEmail: currentUser.email,
-          status: "pending",
-          createdAt: serverTimestamp(),
-        });
-
-        return { created: true, status: "pending" };
       });
-
-      if (!txnResult.created) {
-        if (txnResult.status === "pending") {
-          showErrorNotification("An invitation has already been sent.");
-          return;
-        }
-        if (txnResult.status === "accepted") {
-          showErrorNotification("User is already a collaborator.");
-          return;
-        }
-        showErrorNotification("An invitation already exists.");
-        return;
-      }
-
+    }
       const rawBase =
         (import.meta.env.VITE_API_URL as string | undefined) ?? "";
       const apiBase = rawBase.replace(/\/$/, "");
