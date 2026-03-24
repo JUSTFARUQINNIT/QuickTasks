@@ -35,8 +35,11 @@ function normalizeAttachment(attachment = {}) {
       attachment.uploaded_at ||
       new Date().toISOString(),
     size: attachment.size || 0,
-    type: attachment.type || "application/octet-stream",
+    mimeType:
+      attachment.mimeType || attachment.type || "application/octet-stream",
     viewUrl: attachment.viewUrl || attachment.view_url || null,
+    iconLink: attachment.iconLink || null,
+    thumbnailLink: attachment.thumbnailLink || null,
   };
 }
 
@@ -77,9 +80,11 @@ router.post(
         uniqueName,
         uploadedBy: req.user.uid,
         driveFileId: driveUpload.driveFileId || null,
-        type: driveUpload.mimeType,
+        mimeType: driveUpload.mimeType,
         size: driveUpload.size || file.size,
         url: driveUpload.downloadUrl,
+        iconLink: driveUpload.iconLink,
+        thumbnailLink: driveUpload.thumbnailLink,
         viewUrl: driveUpload.viewUrl,
         createdAt: new Date().toISOString(),
       };

@@ -148,7 +148,8 @@ export async function uploadBufferToGoogleDrive({
 
     const fileMeta = await drive.files.get({
       fileId,
-      fields: "id,name,size,mimeType,webViewLink,webContentLink",
+      fields:
+        "id,name,size,mimeType,iconLink,thumbnailLink,webViewLink,webContentLink",
       supportsAllDrives: true,
     });
 
@@ -157,6 +158,8 @@ export async function uploadBufferToGoogleDrive({
       name: fileMeta.data.name || fileName,
       size: Number(fileMeta.data.size || 0),
       mimeType: fileMeta.data.mimeType || mimeType || "application/octet-stream",
+      iconLink: fileMeta.data.iconLink || null,
+      thumbnailLink: fileMeta.data.thumbnailLink || null,
       viewUrl: fileMeta.data.webViewLink || null,
       downloadUrl:
         fileMeta.data.webContentLink ||

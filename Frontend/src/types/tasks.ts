@@ -19,6 +19,9 @@ export type Attachment = {
   uniqueName?: string;
   uploadedBy?: string;
   driveFileId?: string | null;
+  mimeType?: string;
+  iconLink?: string | null;
+  thumbnailLink?: string | null;
   createdAt?: string;
   name?: string; // legacy field
   type?: string;

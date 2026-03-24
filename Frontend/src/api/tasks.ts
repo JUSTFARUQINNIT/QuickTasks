@@ -34,6 +34,9 @@ export type UploadedAttachment = {
   uniqueName?: string;
   uploadedBy?: string;
   driveFileId?: string | null;
+  mimeType?: string;
+  iconLink?: string | null;
+  thumbnailLink?: string | null;
   createdAt?: string;
   name?: string;
   type: string;
@@ -49,6 +52,7 @@ export type UploadedAttachment = {
 export async function uploadTaskAttachment(
   taskId: string,
   file: File,
+  onProgress?: (progress: number) => void,
 ): Promise<UploadedAttachment> {
   const user = auth.currentUser;
   if (!user) throw new Error("Authentication required");
@@ -57,23 +61,43 @@ export async function uploadTaskAttachment(
   const formData = new FormData();
   formData.append("file", file);
 
-  const res = await fetch(
-    `${getApiBaseUrl()}/api/tasks/${encodeURIComponent(taskId)}/attachments`,
-    {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
-      body: formData,
-    },
-  );
+  return await new Promise<UploadedAttachment>((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open(
+      "POST",
+      `${getApiBaseUrl()}/api/tasks/${encodeURIComponent(taskId)}/attachments`,
+    );
+    xhr.setRequestHeader("Authorization", `Bearer ${token}`);
 
-  const body = await res.json().catch(() => null);
-  if (!res.ok) {
-    throw new Error(body?.error || `Upload failed (${res.status})`);
-  }
+    xhr.upload.onprogress = (event) => {
+      if (!onProgress || !event.lengthComputable) return;
+      const progress = Math.round((event.loaded / event.total) * 100);
+      onProgress(progress);
+    };
 
-  return body.attachment as UploadedAttachment;
+    xhr.onload = () => {
+      let body: any = null;
+      try {
+        body = xhr.responseText ? JSON.parse(xhr.responseText) : null;
+      } catch {
+        body = null;
+      }
+
+      if (xhr.status >= 200 && xhr.status < 300) {
+        onProgress?.(100);
+        resolve(body?.attachment as UploadedAttachment);
+        return;
+      }
+
+      reject(new Error(body?.error || `Upload failed (${xhr.status})`));
+    };
+
+    xhr.onerror = () => {
+      reject(new Error("Network error while uploading file"));
+    };
+
+    xhr.send(formData);
+  });
 }
 
 export async function deleteTaskAttachment(

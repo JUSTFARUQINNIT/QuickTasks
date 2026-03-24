@@ -28,12 +28,6 @@ import {
   HiShare,
   HiChatBubbleLeft,
   HiDocument,
-  HiPhoto,
-  HiVideoCamera,
-  HiArchiveBox,
-  HiTableCells,
-  HiDocumentText,
-  HiComputerDesktop,
   HiArrowDownTray,
   HiTrash,
   HiXMark,
@@ -66,6 +60,7 @@ export function TaskDetailsScreen({
 }: TaskDetailsScreenProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
   const [selectedProfile, setSelectedProfile] = useState<{
     id: string;
     name: string;
@@ -82,6 +77,7 @@ export function TaskDetailsScreen({
   const [subtaskToDeleteId, setSubtaskToDeleteId] = useState<string | null>(
     null,
   );
+  const [fileToDeleteId, setFileToDeleteId] = useState<string | null>(null);
   const { notification, showSuccessNotification, showErrorNotification } =
     useNotification();
 
@@ -369,45 +365,32 @@ export function TaskDetailsScreen({
     }
   };
 
-  const getFileTypeIcon = (fileName: string) => {
-    const extension = fileName.split(".").pop()?.toLowerCase();
+  const getAttachmentMimeType = (attachment: Attachment) =>
+    attachment.mimeType || attachment.type || "";
 
-    switch (extension) {
-      case "pdf":
-        return { icon: HiDocument, color: "#ef4444", label: "PDF" };
-      case "doc":
-      case "docx":
-        return { icon: HiDocumentText, color: "#3b82f6", label: "DOC" };
-      case "txt":
-        return { icon: HiDocumentText, color: "#6b7280", label: "TXT" };
-      case "jpg":
-      case "jpeg":
-      case "png":
-      case "gif":
-      case "svg":
-      case "webp":
-        return { icon: HiPhoto, color: "#10b981", label: "IMG" };
-      case "mp4":
-      case "avi":
-      case "mov":
-      case "wmv":
-        return { icon: HiVideoCamera, color: "#f59e0b", label: "VID" };
-      case "xls":
-      case "xlsx":
-        return { icon: HiTableCells, color: "#10b981", label: "XLS" };
-      case "ppt":
-      case "pptx":
-        return { icon: HiComputerDesktop, color: "#f59e0b", label: "PPT" };
-      case "zip":
-      case "rar":
-      case "7z":
-      case "tar":
-      case "gz":
-        return { icon: HiArchiveBox, color: "#8b5cf6", label: "ARCH" };
-      default:
-        return { icon: HiDocument, color: "#6b7280", label: "FILE" };
+  const getFallbackIcon = (mimeType: string) => {
+    if (mimeType.includes("pdf")) return "/icons/pdf.svg";
+    if (mimeType.includes("image")) return "/icons/image.svg";
+    if (
+      mimeType.includes("word") ||
+      mimeType.includes("officedocument.wordprocessingml")
+    ) {
+      return "/icons/doc.svg";
     }
+    if (
+      mimeType.includes("excel") ||
+      mimeType.includes("spreadsheetml") ||
+      mimeType.includes("csv")
+    ) {
+      return "/icons/excel.svg";
+    }
+    return "/icons/file.svg";
   };
+
+  const getDisplayIcon = (attachment: Attachment) =>
+    attachment.thumbnailLink ||
+    attachment.iconLink ||
+    getFallbackIcon(getAttachmentMimeType(attachment));
 
   const handleFileUpload = async (
     event: React.ChangeEvent<HTMLInputElement>,
@@ -426,6 +409,7 @@ export function TaskDetailsScreen({
     }
 
     setUploading(true);
+    setUploadProgress(0);
 
     try {
       // For invited/shared tasks, `ref` points to the master task document.
@@ -434,7 +418,7 @@ export function TaskDetailsScreen({
         throw new Error("Task ID is missing");
       }
 
-      await uploadTaskAttachment(uploadTaskId, file);
+      await uploadTaskAttachment(uploadTaskId, file, setUploadProgress);
       showSuccessNotification("File uploaded successfully.");
 
       // Clear file input
@@ -446,6 +430,7 @@ export function TaskDetailsScreen({
       showErrorNotification("Failed to upload file. Please try again.");
     } finally {
       setUploading(false);
+      setUploadProgress(0);
     }
   };
 
@@ -475,19 +460,31 @@ export function TaskDetailsScreen({
       return;
     }
 
-    if (!confirm("Are you sure you want to delete this file?")) return;
-
     try {
       const deleteTaskId = currentTask.ref || currentTask.id || task.id;
       if (!deleteTaskId) {
         throw new Error("Task ID is missing");
       }
       await deleteTaskAttachment(deleteTaskId, attachmentId);
+      setFileToDeleteId(null);
       showSuccessNotification("File deleted successfully.");
     } catch (error) {
       console.error("Error deleting file:", error);
       showErrorNotification("Failed to delete file. Please try again.");
     }
+  };
+
+  const requestDeleteFile = (attachmentId: string) => {
+    setFileToDeleteId(attachmentId);
+  };
+
+  const confirmDeleteFile = async () => {
+    if (!fileToDeleteId) return;
+    await deleteFile(fileToDeleteId);
+  };
+
+  const cancelDeleteFile = () => {
+    setFileToDeleteId(null);
   };
 
   const handleProfileClick = (userId: string, role: string) => {
@@ -843,8 +840,7 @@ export function TaskDetailsScreen({
               ) : (
                 attachments.map((attachment) => {
                   const displayName = getAttachmentDisplayName(attachment);
-                  const fileIcon = getFileTypeIcon(displayName);
-                  const IconComponent = fileIcon.icon;
+                  const displayIcon = getDisplayIcon(attachment);
                   const currentUser = auth.currentUser;
                   const showDeleteButton = canDeleteFile(
                     currentUser ? { id: currentUser.uid } : null,
@@ -860,9 +856,21 @@ export function TaskDetailsScreen({
                     >
                       <div
                         className="task-file-icon"
-                        style={{ color: fileIcon.color }}
+                        style={{
+                          width: "24px",
+                          height: "24px",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                        }}
                       >
-                        <IconComponent />
+                        <img
+                          src={displayIcon}
+                          alt="file icon"
+                          width={24}
+                          height={24}
+                          style={{ borderRadius: "4px", objectFit: "cover" }}
+                        />
                       </div>
                       <div className="task-file-info">
                         <div className="task-file-name">{displayName}</div>
@@ -871,7 +879,9 @@ export function TaskDetailsScreen({
                             {((attachment.size || 0) / 1024).toFixed(1)} KB
                           </span>
                           <span className="task-file-type">
-                            {fileIcon.label}
+                            {(getAttachmentMimeType(attachment) || "file")
+                              .split("/")[1]
+                              ?.toUpperCase() || "FILE"}
                           </span>
                         </div>
                       </div>
@@ -892,7 +902,7 @@ export function TaskDetailsScreen({
                               className="task-file-action-btn delete"
                               onClick={(e) => {
                                 e.stopPropagation();
-                                deleteFile(attachment.id);
+                                requestDeleteFile(attachment.id);
                               }}
                               title="Delete file"
                             >
@@ -927,6 +937,46 @@ export function TaskDetailsScreen({
                 </>
               )}
             </div>
+            {uploading && (
+              <div
+                style={{
+                  width: "100%",
+                  marginTop: "12px",
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: "6px",
+                }}
+              >
+                <div
+                  style={{
+                    width: "100%",
+                    height: "8px",
+                    background: "rgba(148, 163, 184, 0.25)",
+                    borderRadius: "999px",
+                    overflow: "hidden",
+                  }}
+                >
+                  <div
+                    style={{
+                      width: `${uploadProgress}%`,
+                      height: "100%",
+                      background:
+                        "linear-gradient(90deg, #22c55e 0%, #84cc16 100%)",
+                      transition: "width 0.2s ease",
+                    }}
+                  />
+                </div>
+                <span
+                  style={{
+                    fontSize: "12px",
+                    color: "var(--qt-text-soft)",
+                    textAlign: "right",
+                  }}
+                >
+                  Uploading... {uploadProgress}%
+                </span>
+              </div>
+            )}
           </section>
           {/* Task List Section */}
           <section className="task-details-section">
@@ -1191,6 +1241,31 @@ export function TaskDetailsScreen({
               <button className="btn btn-danger" onClick={confirmDeleteSubtask}>
                 <HiTrash className="trash-animation" />
                 <span>Delete Subtask</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* File Delete Confirmation Modal */}
+      {fileToDeleteId && (
+        <div className="modal-overlay">
+          <div className="modal-content delete-modal">
+            <div className="delete-modal-header">
+              <h3>Delete File</h3>
+            </div>
+            <p>
+              Are you sure you want to delete this file? This action cannot be
+              undone.
+            </p>
+            <div className="modal-actions">
+              <button className="btn btn-cancel" onClick={cancelDeleteFile}>
+                <HiXMark className="cancel-animation" />
+                <span>Cancel</span>
+              </button>
+              <button className="btn btn-danger" onClick={confirmDeleteFile}>
+                <HiTrash className="trash-animation" />
+                <span>Delete File</span>
               </button>
             </div>
           </div>
