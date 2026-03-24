@@ -41,8 +41,8 @@ router.delete(
         typeof taskData.user_id === "string"
           ? taskData.user_id
           : typeof taskData.ownerId === "string"
-            ? taskData.ownerId
-            : null;
+          ? taskData.ownerId
+          : null;
 
       if (!ownerId) {
         return res.status(400).json({ error: "Task owner is missing" });
@@ -63,15 +63,16 @@ router.delete(
         return res.status(404).json({ error: "Collaborator not found" });
       }
 
+      // Update collaborators array
       const updatedCollaborators = collaborators.filter(
-        (id) => id !== collaboratorId,
+        (id) => id !== collaboratorId
       );
       await taskRef.update({ collaborators: updatedCollaborators });
 
       const taskTitle = String(taskData.title || "a task");
       const nowIso = new Date().toISOString();
 
-      // Notify removed collaborator.
+      // Notify removed collaborator
       await adminDb.collection("notifications").add({
         userId: collaboratorId,
         taskId,
@@ -83,26 +84,45 @@ router.delete(
         createdBy: requesterId,
       });
 
-      // Remove collaborator-specific task-related data.
-      const [taskInvitesSnap, taskCommentsSnap, taskNotificationsSnap] =
-        await Promise.all([
-          adminDb
-            .collection("taskInvites")
-            .where("taskId", "==", taskId)
-            .where("inviteeId", "==", collaboratorId)
-            .get(),
-          adminDb
-            .collection("task_comments")
-            .where("task_id", "==", taskId)
-            .where("user_id", "==", collaboratorId)
-            .get(),
-          adminDb
-            .collection("notifications")
-            .where("taskId", "==", taskId)
-            .where("userId", "==", collaboratorId)
-            .get(),
-        ]);
+      // Fetch collaborator email to delete invites by email
+      const collaboratorProfileSnap = await adminDb
+        .collection("profiles")
+        .doc(collaboratorId)
+        .get();
+      const collaboratorEmail = collaboratorProfileSnap.data()?.email;
 
+      // Remove collaborator-specific task-related data
+      const [taskCommentsSnap, taskNotificationsSnap] = await Promise.all([
+        adminDb
+          .collection("task_comments")
+          .where("task_id", "==", taskId)
+          .where("user_id", "==", collaboratorId)
+          .get(),
+        adminDb
+          .collection("notifications")
+          .where("taskId", "==", taskId)
+          .where("userId", "==", collaboratorId)
+          .get(),
+      ]);
+
+      // Fetch invites by ID
+      const invitesByIdSnap = await adminDb
+        .collection("taskInvites")
+        .where("taskId", "==", taskId)
+        .where("inviteeId", "==", collaboratorId)
+        .get();
+
+      // Fetch invites by email (optional, for frontend checks)
+      let invitesByEmailSnap = { docs: [] };
+      if (collaboratorEmail) {
+        invitesByEmailSnap = await adminDb
+          .collection("taskInvites")
+          .where("taskId", "==", taskId)
+          .where("invitedEmail", "==", collaboratorEmail)
+          .get();
+      }
+
+      // Fetch userTasks projections
       let userTaskByRefSnap = { docs: [], size: 0 };
       try {
         userTaskByRefSnap = await adminDb
@@ -112,21 +132,24 @@ router.delete(
           .where("ref", "==", taskId)
           .get();
       } catch (extraError) {
-        console.error("Optional collaborator userTasks cleanup failed:", extraError);
+        console.error(
+          "Optional collaborator userTasks cleanup failed:",
+          extraError
+        );
       }
 
+      const allInviteDocs = [...invitesByIdSnap.docs, ...invitesByEmailSnap.docs];
+
+      // Prepare batch deletes
       const deletes = [
-        adminDb
-          .collection("userTasks")
-          .doc(collaboratorId)
-          .collection("tasks")
-          .doc(taskId),
+        adminDb.collection("userTasks").doc(collaboratorId).collection("tasks").doc(taskId),
         ...userTaskByRefSnap.docs.map((d) => d.ref),
-        ...taskInvitesSnap.docs.map((d) => d.ref),
+        ...allInviteDocs.map((d) => d.ref),
         ...taskCommentsSnap.docs.map((d) => d.ref),
         ...taskNotificationsSnap.docs.map((d) => d.ref),
       ];
 
+      // Commit in batches
       const MAX_BATCH_OPS = 450;
       for (const refs of chunkArray(deletes, MAX_BATCH_OPS)) {
         const batch = adminDb.batch();
@@ -139,7 +162,7 @@ router.delete(
         removedCollaboratorId: collaboratorId,
         cleanup: {
           userTasksByRef: userTaskByRefSnap.size,
-          invites: taskInvitesSnap.size,
+          invites: allInviteDocs.length,
           comments: taskCommentsSnap.size,
           notifications: taskNotificationsSnap.size,
         },
@@ -150,7 +173,7 @@ router.delete(
         e instanceof Error ? e.message : "Failed to remove collaborator";
       return res.status(500).json({ error: message });
     }
-  },
+  }
 );
 
 export default router;

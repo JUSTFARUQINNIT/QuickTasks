@@ -68,6 +68,7 @@ export function InviteCollaboratorModal({
 
       setLoading(true);
 
+       // 1 Fetch the user profile by email
       const usersRef = collection(db, "profiles");
       const q = query(usersRef, where("email", "==", trimmedEmail));
       const snap = await getDocs(q);
@@ -81,7 +82,18 @@ export function InviteCollaboratorModal({
       const invitedUserDoc = snap.docs[0];
       const invitedUserId = invitedUserDoc.id;
 
-      // 1) Check for an existing invite with the same {taskId, invitedEmail}.
+        // 2 Check if user is already a collaborator
+        const taskRef = doc(db, "tasks", task.id);
+        const taskSnap = await taskRef.get();
+        const taskData = taskSnap.data() || {};
+        const collaborators: string[] = Array.isArray(taskData.collaborators)
+          ? taskData.collaborators
+          : [];
+          if (collaborators) {
+            
+          }
+
+      // 2) Check for an existing invite with the same {taskId, invitedEmail}.
       const existing = await findExistingInviteStatus(task.id, trimmedEmail);
       if (existing) {
         if (existing.status === "pending") {
