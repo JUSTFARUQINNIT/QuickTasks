@@ -1,6 +1,7 @@
-import { auth, db, storage } from "../../lib/firebaseClient";
+import { auth, db } from "../../lib/firebaseClient";
 import type { Task } from "../../types/tasks";
 import { calculateTaskCompletion } from "../../utils/taskCompletion";
+import { uploadTaskAttachment } from "../../api/tasks";
 import { NotificationBanner } from "../NotificationBanner";
 import { useNotification } from "../../hooks/useNotification";
 import { TaskHeader } from "./TaskHeader";
@@ -16,11 +17,6 @@ import {
   collection,
   onSnapshot,
 } from "firebase/firestore";
-import {
-  ref as storageRef,
-  uploadBytes,
-  getDownloadURL,
-} from "firebase/storage";
 import {
   HiPlus,
   HiCheck,
@@ -40,7 +36,6 @@ import {
   HiComputerDesktop,
   HiArrowDownTray,
   HiTrash,
-  HiPencil,
   HiXMark,
 } from "react-icons/hi2";
 
@@ -154,7 +149,10 @@ export function TaskDetailsScreen({
       taskRef,
       (docSnapshot) => {
         if (docSnapshot.exists()) {
-          const updatedTask = docSnapshot.data() as Task;
+          const updatedTask = {
+            ...(docSnapshot.data() as Task),
+            id: docSnapshot.id,
+          };
           setCurrentTask(updatedTask);
         }
       },
@@ -245,8 +243,8 @@ export function TaskDetailsScreen({
       }
 
       const response = await fetch(
-        `https://quicktasks-28yz.onrender.com/api/tasks/${task.id}`,
-        // `http://localhost:8787/api/tasks/${task.id}`,
+        // `https://quicktasks-28yz.onrender.com/api/tasks/${task.id}`,
+        `http://localhost:8787/api/tasks/${task.id}`,
         {
           method: "PUT",
           headers: {
@@ -415,31 +413,14 @@ export function TaskDetailsScreen({
     setUploading(true);
 
     try {
-      const fileRef = storageRef(
-        storage,
-        `tasks/${currentTask.id}/${Date.now()}_${file.name}`,
-      );
+      // For invited/shared tasks, `ref` points to the master task document.
+      const uploadTaskId = currentTask.ref || currentTask.id || task.id;
+      if (!uploadTaskId) {
+        throw new Error("Task ID is missing");
+      }
 
-      // Upload file to Firebase Storage
-      await uploadBytes(fileRef, file);
-      const downloadURL = await getDownloadURL(fileRef);
-
-      // Create attachment object
-      const attachment = {
-        id: Date.now().toString(),
-        name: file.name,
-        type: file.type || "application/octet-stream",
-        size: file.size,
-        url: downloadURL,
-        uploaded_by: auth.currentUser?.uid || "",
-        uploaded_at: new Date().toISOString(),
-      };
-
-      // Update task document with new attachment
-      const taskRef = doc(db, "tasks", currentTask.id);
-      await updateDoc(taskRef, {
-        attachments: arrayUnion(attachment),
-      });
+      await uploadTaskAttachment(uploadTaskId, file);
+      showSuccessNotification("File uploaded successfully.");
 
       // Clear file input
       if (fileInputRef.current) {
@@ -482,45 +463,6 @@ export function TaskDetailsScreen({
     } catch (error) {
       console.error("Error deleting file:", error);
       showErrorNotification("Failed to delete file. Please try again.");
-    }
-  };
-
-  const updateFile = async (attachmentId: string, newFile: File) => {
-    if (!isOwner) {
-      showErrorNotification("Only the task owner can update files.");
-      return;
-    }
-
-    try {
-      const fileRef = storageRef(
-        storage,
-        `tasks/${currentTask.id}/${Date.now()}_${newFile.name}`,
-      );
-
-      // Upload new file
-      await uploadBytes(fileRef, newFile);
-      const downloadURL = await getDownloadURL(fileRef);
-
-      // Create updated attachment object
-      const updatedAttachment = {
-        id: attachmentId,
-        name: newFile.name,
-        type: newFile.type || "application/octet-stream",
-        size: newFile.size,
-        url: downloadURL,
-        uploaded_by: auth.currentUser?.uid || "",
-        uploaded_at: new Date().toISOString(),
-      };
-
-      // Update task document
-      const taskRef = doc(db, "tasks", currentTask.id);
-      const updatedAttachments = attachments.map((att) =>
-        att.id === attachmentId ? updatedAttachment : att,
-      );
-      await updateDoc(taskRef, { attachments: updatedAttachments });
-    } catch (error) {
-      console.error("Error updating file:", error);
-      showErrorNotification("Failed to update file. Please try again.");
     }
   };
 
@@ -915,24 +857,6 @@ export function TaskDetailsScreen({
                         </button>
                         {isOwner && (
                           <>
-                            <button
-                              className="task-file-action-btn update"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                const input = document.createElement("input");
-                                input.type = "file";
-                                input.onchange = (event) => {
-                                  const file = (
-                                    event.target as HTMLInputElement
-                                  ).files?.[0];
-                                  if (file) updateFile(attachment.id, file);
-                                };
-                                input.click();
-                              }}
-                              title="Update file"
-                            >
-                              <HiPencil />
-                            </button>
                             <button
                               className="task-file-action-btn delete"
                               onClick={(e) => {

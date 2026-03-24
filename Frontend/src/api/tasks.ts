@@ -27,3 +27,45 @@ export async function deleteTask(taskId: string): Promise<void> {
   }
 }
 
+export type UploadedAttachment = {
+  id: string;
+  name: string;
+  type: string;
+  size: number;
+  url: string;
+  view_url?: string | null;
+  drive_file_id?: string | null;
+  uploaded_by: string;
+  uploaded_at: string;
+};
+
+export async function uploadTaskAttachment(
+  taskId: string,
+  file: File,
+): Promise<UploadedAttachment> {
+  const user = auth.currentUser;
+  if (!user) throw new Error("Authentication required");
+
+  const token = await user.getIdToken();
+  const formData = new FormData();
+  formData.append("file", file);
+
+  const res = await fetch(
+    `${getApiBaseUrl()}/api/tasks/${encodeURIComponent(taskId)}/attachments`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+      body: formData,
+    },
+  );
+
+  const body = await res.json().catch(() => null);
+  if (!res.ok) {
+    throw new Error(body?.error || `Upload failed (${res.status})`);
+  }
+
+  return body.attachment as UploadedAttachment;
+}
+

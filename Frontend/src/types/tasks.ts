@@ -18,6 +18,8 @@ export type Attachment = {
   type: string;
   size: number;
   url: string;
+  view_url?: string | null;
+  drive_file_id?: string | null;
   uploaded_by: string;
   uploaded_at: string;
 };
