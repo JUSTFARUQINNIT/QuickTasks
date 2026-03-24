@@ -243,8 +243,8 @@ export function TaskDetailsScreen({
       }
 
       const response = await fetch(
-        // `https://quicktasks-28yz.onrender.com/api/tasks/${task.id}`,
-        `http://localhost:8787/api/tasks/${task.id}`,
+        `https://quicktasks-28yz.onrender.com/api/tasks/${task.id}`,
+        // `http://localhost:8787/api/tasks/${task.id}`,
         {
           method: "PUT",
           headers: {

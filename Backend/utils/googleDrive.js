@@ -49,8 +49,31 @@ function getOAuthConfig() {
 }
 
 function createAuthClient() {
+  const authMode = (process.env.GOOGLE_DRIVE_AUTH_MODE || "auto").toLowerCase();
   const serviceAccount = getServiceAccountConfig();
-  if (serviceAccount) {
+  const oauthConfig = getOAuthConfig();
+
+  if (authMode === "oauth") {
+    if (!oauthConfig) {
+      throw new Error(
+        "GOOGLE_DRIVE_AUTH_MODE=oauth but OAuth env vars are missing",
+      );
+    }
+    const oauth2Client = new google.auth.OAuth2(
+      oauthConfig.clientId,
+      oauthConfig.clientSecret,
+      oauthConfig.redirectUri,
+    );
+    oauth2Client.setCredentials({ refresh_token: oauthConfig.refreshToken });
+    return oauth2Client;
+  }
+
+  if (authMode === "service_account") {
+    if (!serviceAccount) {
+      throw new Error(
+        "GOOGLE_DRIVE_AUTH_MODE=service_account but service account env vars are missing",
+      );
+    }
     return new google.auth.JWT(
       serviceAccount.clientEmail,
       null,
@@ -59,7 +82,9 @@ function createAuthClient() {
     );
   }
 
-  const oauthConfig = getOAuthConfig();
+  // Auto mode:
+  // - Prefer OAuth (personal Drive quota)
+  // - Fallback to service account when OAuth is unavailable
   if (oauthConfig) {
     const oauth2Client = new google.auth.OAuth2(
       oauthConfig.clientId,
@@ -68,6 +93,15 @@ function createAuthClient() {
     );
     oauth2Client.setCredentials({ refresh_token: oauthConfig.refreshToken });
     return oauth2Client;
+  }
+
+  if (serviceAccount) {
+    return new google.auth.JWT(
+      serviceAccount.clientEmail,
+      null,
+      serviceAccount.privateKey,
+      DRIVE_SCOPE,
+    );
   }
 
   throw new Error(
@@ -81,49 +115,62 @@ export async function uploadBufferToGoogleDrive({
   mimeType,
   folderId,
 }) {
-  const auth = createAuthClient();
-  const drive = google.drive({ version: "v3", auth });
+  try {
+    const auth = createAuthClient();
+    const drive = google.drive({ version: "v3", auth });
 
-  const createResponse = await drive.files.create({
-    requestBody: {
-      name: fileName,
-      parents: folderId ? [folderId] : undefined,
-    },
-    media: {
-      mimeType: mimeType || "application/octet-stream",
-      body: Readable.from(buffer),
-    },
-    fields: "id,name,size,mimeType",
-  });
+    const createResponse = await drive.files.create({
+      requestBody: {
+        name: fileName,
+        parents: folderId ? [folderId] : undefined,
+      },
+      media: {
+        mimeType: mimeType || "application/octet-stream",
+        body: Readable.from(buffer),
+      },
+      fields: "id,name,size,mimeType",
+      supportsAllDrives: true,
+    });
 
-  const fileId = createResponse.data.id;
-  if (!fileId) {
-    throw new Error("Google Drive upload failed: missing file id");
+    const fileId = createResponse.data.id;
+    if (!fileId) {
+      throw new Error("Google Drive upload failed: missing file id");
+    }
+
+    await drive.permissions.create({
+      fileId,
+      requestBody: {
+        role: "reader",
+        type: "anyone",
+      },
+      supportsAllDrives: true,
+    });
+
+    const fileMeta = await drive.files.get({
+      fileId,
+      fields: "id,name,size,mimeType,webViewLink,webContentLink",
+      supportsAllDrives: true,
+    });
+
+    return {
+      driveFileId: fileMeta.data.id,
+      name: fileMeta.data.name || fileName,
+      size: Number(fileMeta.data.size || 0),
+      mimeType: fileMeta.data.mimeType || mimeType || "application/octet-stream",
+      viewUrl: fileMeta.data.webViewLink || null,
+      downloadUrl:
+        fileMeta.data.webContentLink ||
+        (fileMeta.data.id
+          ? `https://drive.google.com/uc?id=${fileMeta.data.id}&export=download`
+          : null),
+    };
+  } catch (error) {
+    const message = String(error?.message || "");
+    if (message.includes("Service Accounts do not have storage quota")) {
+      throw new Error(
+        "Service account quota error. Use OAuth mode (GOOGLE_DRIVE_AUTH_MODE=oauth) for personal Drive, or upload into a Shared Drive folder and keep service_account mode.",
+      );
+    }
+    throw error;
   }
-
-  await drive.permissions.create({
-    fileId,
-    requestBody: {
-      role: "reader",
-      type: "anyone",
-    },
-  });
-
-  const fileMeta = await drive.files.get({
-    fileId,
-    fields: "id,name,size,mimeType,webViewLink,webContentLink",
-  });
-
-  return {
-    driveFileId: fileMeta.data.id,
-    name: fileMeta.data.name || fileName,
-    size: Number(fileMeta.data.size || 0),
-    mimeType: fileMeta.data.mimeType || mimeType || "application/octet-stream",
-    viewUrl: fileMeta.data.webViewLink || null,
-    downloadUrl:
-      fileMeta.data.webContentLink ||
-      (fileMeta.data.id
-        ? `https://drive.google.com/uc?id=${fileMeta.data.id}&export=download`
-        : null),
-  };
 }
