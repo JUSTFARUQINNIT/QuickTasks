@@ -459,11 +459,17 @@ export function TaskDetailsScreen({
     const isAllowed = canDeleteFile(
       currentUser ? { id: currentUser.uid } : null,
       { ownerId: currentTask.ownerId || null },
-      { uploadedBy: targetAttachment ? getAttachmentUploadedBy(targetAttachment) : null },
+      {
+        uploadedBy: targetAttachment
+          ? getAttachmentUploadedBy(targetAttachment)
+          : null,
+      },
     );
 
     if (!isAllowed) {
-      showErrorNotification("Only the task owner or file uploader can delete files.");
+      showErrorNotification(
+        "Only the task owner or file uploader can delete files.",
+      );
       return;
     }
 
@@ -718,15 +724,15 @@ export function TaskDetailsScreen({
             <h1 className="task-details-title">{task.title}</h1>
             <div className="task-details-status">
               <div className="status-priority">
-              <span className={`task-status-badge ${getStatusClass()}`}>
-                {getStatusText()}
-              </span>
+                <span className={`task-status-badge ${getStatusClass()}`}>
+                  {getStatusText()}
+                </span>
                 <div className="task-details-header-meta">
-              <span className={`task-pill ${getPriorityClass()}`}>
-                {task.priority?.toUpperCase() || "MEDIUM"}
-              </span>
-            </div>
-            </div>
+                  <span className={`task-pill ${getPriorityClass()}`}>
+                    {task.priority?.toUpperCase() || "MEDIUM"}
+                  </span>
+                </div>
+              </div>
               {subtasks.length > 0 && (
                 <div className="task-progress-info">
                   <div className="task-progress-bar">
@@ -734,7 +740,6 @@ export function TaskDetailsScreen({
                       className="task-progress-fill"
                       style={{ width: `${calculateProgress()}%` }}
                     />
-                    
                   </div>
                   <span className="task-progress-text">
                     {subtasks.filter((st) => st.completed).length} of{" "}
@@ -743,7 +748,6 @@ export function TaskDetailsScreen({
                 </div>
               )}
             </div>
-            
           </section>
 
           {/* Team Members Section */}
@@ -854,8 +858,9 @@ export function TaskDetailsScreen({
           </section>
 
           {/* File & Links Section */}
+
           <section className="task-details-section">
-            <h3 className="task-section-title">File & Links</h3>
+            <h3 className="task-section-title">Files & Links</h3>
             <div className="task-files-links">
               {attachments.length === 0 ? (
                 <div className="no-files-container">
@@ -872,13 +877,17 @@ export function TaskDetailsScreen({
               ) : (
                 attachments.map((attachment) => {
                   const displayName = getAttachmentDisplayName(attachment);
-                  const displayIcon = getDisplayIcon(attachment);
+                  // Use only Google Drive iconLink, fallback to local icon
+                  const displayIcon =
+                    attachment.iconLink || getDisplayIcon(attachment);
+
                   const currentUser = auth.currentUser;
                   const showDeleteButton = canDeleteFile(
                     currentUser ? { id: currentUser.uid } : null,
                     { ownerId: currentTask.ownerId || null },
                     { uploadedBy: getAttachmentUploadedBy(attachment) },
                   );
+
                   return (
                     <div
                       key={attachment.id}
@@ -886,15 +895,14 @@ export function TaskDetailsScreen({
                       onClick={() => downloadFile(attachment)}
                       style={{ cursor: "pointer" }}
                     >
-                      <div
-                        className="task-file-icon"
-                      >
+                      <div className="task-file-icon">
                         <img
                           src={displayIcon}
-                          alt="file icon"
-                          
+                          alt={displayName}
+                          className="task-file-icon-img"
                         />
                       </div>
+
                       <div className="task-file-info">
                         <div className="task-file-name">{displayName}</div>
                         <div className="task-file-meta">
@@ -908,6 +916,7 @@ export function TaskDetailsScreen({
                           </span>
                         </div>
                       </div>
+
                       <div className="task-file-actions">
                         <button
                           className="task-file-action-btn download"
@@ -919,26 +928,25 @@ export function TaskDetailsScreen({
                         >
                           <HiArrowDownTray />
                         </button>
+
                         {showDeleteButton && (
-                          <>
-                            <button
-                              className="task-file-action-btn delete"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                requestDeleteFile(attachment.id);
-                              }}
-                              title="Delete file"
-                            >
-                              <HiTrash />
-                            </button>
-                          </>
+                          <button
+                            className="task-file-action-btn delete"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              requestDeleteFile(attachment.id);
+                            }}
+                            title="Delete file"
+                          >
+                            <HiTrash />
+                          </button>
                         )}
                       </div>
                     </div>
                   );
                 })
               )}
-              {/* Enable upload for all task participants */}
+
               {(isOwner ||
                 task.collaborators?.includes(auth.currentUser?.uid || "")) && (
                 <>
@@ -960,6 +968,7 @@ export function TaskDetailsScreen({
                 </>
               )}
             </div>
+
             {uploading && (
               <div
                 style={{
@@ -1001,6 +1010,7 @@ export function TaskDetailsScreen({
               </div>
             )}
           </section>
+
           {/* Task List Section */}
           <section className="task-details-section">
             <div
