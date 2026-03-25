@@ -1,5 +1,5 @@
 import "./LandingPage.css";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import {
   HiOutlineCheckCircle,
@@ -19,12 +19,75 @@ import { Footer } from "./Footer";
 
 export function LandingPage() {
   const [email, setEmail] = useState("");
+  const [contactForm, setContactForm] = useState({
+    name: "",
+    email: "",
+    subject: "",
+    message: "",
+    company: ""
+  });
+  const [formSubmitting, setFormSubmitting] = useState(false);
+  const [formMessage, setFormMessage] = useState("");
 
   const handleEmailSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     console.log("Email submitted:", email);
     setEmail("");
   };
+
+  const handleContactSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setFormSubmitting(true);
+    setFormMessage("");
+
+    try {
+      const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:8787'}/api/contact`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(contactForm),
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        setFormMessage("✅ Message sent successfully! We'll get back to you within 24 hours.");
+        setContactForm({
+          name: "",
+          email: "",
+          subject: "",
+          message: "",
+          company: ""
+        });
+      } else {
+        setFormMessage(`❌ ${data.error || "Failed to send message. Please try again."}`);
+      }
+    } catch (error) {
+      console.error("Contact form error:", error);
+      setFormMessage("❌ Failed to send message. Please try again later.");
+    } finally {
+      setFormSubmitting(false);
+    }
+  };
+
+  const handleContactChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
+    setContactForm({
+      ...contactForm,
+      [e.target.name]: e.target.value
+    });
+  };
+
+  // Clear form message after 3 seconds
+  useEffect(() => {
+    if (formMessage) {
+      const timer = setTimeout(() => {
+        setFormMessage("");
+      }, 3000);
+
+      return () => clearTimeout(timer);
+    }
+  }, [formMessage]);
   return (
     <div className="landing-page">
       {/* Navigation Bar */}
@@ -426,32 +489,75 @@ export function LandingPage() {
             </div>
             <div className="contact-form">
               <h3>Send us a Message</h3>
-              <form className="form">
+              
+              <form className="form" onSubmit={handleContactSubmit}>
                 <div className="form-group">
-                  <input type="text" placeholder="Your Name" required />
+                  <input 
+                    type="text" 
+                    name="name"
+                    placeholder="Your Name" 
+                    value={contactForm.name}
+                    onChange={handleContactChange}
+                    required 
+                  />
                 </div>
                 <div className="form-group">
-                  <input type="email" placeholder="Your Email" required />
+                  <input 
+                    type="email" 
+                    name="email"
+                    placeholder="Your Email" 
+                    value={contactForm.email}
+                    onChange={handleContactChange}
+                    required 
+                  />
                 </div>
                 <div className="form-group">
-                  <select required>
+                  <input 
+                    type="text" 
+                    name="company"
+                    placeholder="Your Company (Optional)" 
+                    value={contactForm.company}
+                    onChange={handleContactChange}
+                  />
+                </div>
+                <div className="form-group">
+                  <select 
+                    name="subject"
+                    value={contactForm.subject}
+                    onChange={handleContactChange}
+                    required
+                  >
                     <option value="">Select Topic</option>
-                    <option value="support">Technical Support</option>
-                    <option value="sales">Sales Inquiry</option>
-                    <option value="feedback">Feedback</option>
-                    <option value="partnership">Partnership</option>
+                    <option value="Technical Support">Technical Support</option>
+                    <option value="Sales Inquiry">Sales Inquiry</option>
+                    <option value="Feedback">Feedback</option>
+                    <option value="Partnership">Partnership</option>
+                    <option value="General">General Inquiry</option>
                   </select>
                 </div>
                 <div className="form-group">
                   <textarea
+                    name="message"
                     placeholder="Your Message"
+                    value={contactForm.message}
+                    onChange={handleContactChange}
                     rows={5}
                     required
                   ></textarea>
                 </div>
-                <button type="submit" className="btn btn-primary btn-full">
-                  Send Message
+                <button 
+                  type="submit" 
+                  className="btn btn-primary btn-full"
+                  disabled={formSubmitting}
+                >
+                  {formSubmitting ? "Sending..." : "Send Message"}
                 </button>
+                
+                {formMessage && (
+                <div className={`form-message ${formMessage.includes("✅") ? "success" : "error"}`}>
+                  {formMessage}
+                </div>
+              )}
               </form>
             </div>
           </div>
