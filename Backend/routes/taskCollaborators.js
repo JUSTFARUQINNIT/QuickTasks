@@ -41,8 +41,8 @@ router.delete(
         typeof taskData.user_id === "string"
           ? taskData.user_id
           : typeof taskData.ownerId === "string"
-          ? taskData.ownerId
-          : null;
+            ? taskData.ownerId
+            : null;
 
       if (!ownerId) {
         return res.status(400).json({ error: "Task owner is missing" });
@@ -65,7 +65,7 @@ router.delete(
 
       // Update collaborators array
       const updatedCollaborators = collaborators.filter(
-        (id) => id !== collaboratorId
+        (id) => id !== collaboratorId,
       );
       await taskRef.update({ collaborators: updatedCollaborators });
 
@@ -134,15 +134,22 @@ router.delete(
       } catch (extraError) {
         console.error(
           "Optional collaborator userTasks cleanup failed:",
-          extraError
+          extraError,
         );
       }
 
-      const allInviteDocs = [...invitesByIdSnap.docs, ...invitesByEmailSnap.docs];
+      const allInviteDocs = [
+        ...invitesByIdSnap.docs,
+        ...invitesByEmailSnap.docs,
+      ];
 
       // Prepare batch deletes
       const deletes = [
-        adminDb.collection("userTasks").doc(collaboratorId).collection("tasks").doc(taskId),
+        adminDb
+          .collection("userTasks")
+          .doc(collaboratorId)
+          .collection("tasks")
+          .doc(taskId),
         ...userTaskByRefSnap.docs.map((d) => d.ref),
         ...allInviteDocs.map((d) => d.ref),
         ...taskCommentsSnap.docs.map((d) => d.ref),
@@ -173,7 +180,7 @@ router.delete(
         e instanceof Error ? e.message : "Failed to remove collaborator";
       return res.status(500).json({ error: message });
     }
-  }
+  },
 );
 
 export default router;

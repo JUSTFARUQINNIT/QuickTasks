@@ -1,0 +1,158 @@
+.footer {
+  background: var(--qt-bg, #020617);
+  border-top: 1px solid var(--qt-border-subtle, rgba(148, 163, 184, 0.3));
+  padding: 60px 24px 20px;
+  margin-top: auto;
+}
+
+.footer-content {
+  display: grid;
+  grid-template-columns: 2fr 1fr 1fr 1fr;
+  gap: 40px;
+  margin-bottom: 40px;
+  max-width: 1200px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.footer-section h3 {
+  font-size: 1.5rem;
+  font-weight: 600;
+  margin-bottom: 16px;
+  color: var(--qt-text, #e5e7eb);
+}
+
+.footer-section h4 {
+  font-size: 1.125rem;
+  font-weight: 600;
+  margin-bottom: 16px;
+  color: var(--qt-text, #e5e7eb);
+}
+
+.footer-section p {
+  color: var(--qt-text-soft, #9ca3af);
+  line-height: 1.6;
+  margin-bottom: 16px;
+}
+
+.footer-brand {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+.footer-brand span {
+  font-size: 1.125rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--qt-accent, #78d957);
+}
+.footer-brand img {
+  width: 28px;
+  height: 28px;
+  margin-top: 8px;
+}
+
+.footer-contact {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.contact-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--qt-text-soft, #9ca3af);
+  font-size: 0.875rem;
+}
+
+.contact-item svg {
+  width: 16px;
+  height: 16px;
+  color: var(--qt-accent, #78d957);
+  flex-shrink: 0;
+}
+
+.footer-section ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.footer-section ul li {
+  margin-bottom: 8px;
+}
+
+.footer-section ul li a {
+  color: var(--qt-text-soft, #9ca3af);
+  text-decoration: none;
+  transition: color 0.3s ease;
+  font-size: 0.875rem;
+}
+
+.footer-section ul li a:hover {
+  color: var(--qt-accent, #78d957);
+}
+
+.footer-bottom {
+  border-top: 1px solid var(--qt-border-subtle, rgba(148, 163, 184, 0.3));
+  padding-top: 20px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  max-width: 1200px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.footer-copyright p {
+  margin: 0;
+  color: var(--qt-text-soft, #9ca3af);
+  font-size: 0.875rem;
+}
+
+.footer-legal {
+  display: flex;
+  gap: 24px;
+}
+
+.footer-legal a {
+  color: var(--qt-text-soft, #9ca3af);
+  text-decoration: none;
+  transition: color 0.3s ease;
+  font-size: 0.875rem;
+}
+
+.footer-legal a:hover {
+  color: var(--qt-accent, #78d957);
+}
+
+@media (max-width: 1024px) {
+  .footer-content {
+    grid-template-columns: 1fr 1fr;
+    gap: 32px;
+  }
+}
+
+@media (max-width: 768px) {
+  .footer {
+    padding: 40px 16px 16px;
+  }
+
+  .footer-content {
+    grid-template-columns: 1fr;
+    gap: 24px;
+  }
+
+  .footer-bottom {
+    flex-direction: column;
+    gap: 16px;
+    text-align: center;
+  }
+
+  .footer-legal {
+    flex-direction: column;
+    gap: 12px;
+  }
+}

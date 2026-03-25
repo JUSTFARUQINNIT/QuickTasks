@@ -5,7 +5,10 @@ export async function requireAuth(req, res, next) {
     const header = req.headers.authorization || "";
     const [, token] = header.split(" ");
 
-    console.log("🔑 Auth check:", { header: header.substring(0, 20) + "...", hasToken: !!token });
+    console.log("🔑 Auth check:", {
+      header: header.substring(0, 20) + "...",
+      hasToken: !!token,
+    });
 
     if (!token) {
       console.log("❌ Missing auth token");
@@ -29,7 +32,10 @@ export async function requireTaskAccess(req, res, next) {
       return res.status(400).json({ error: "Missing taskId" });
     }
 
-    console.log("🔐 Checking task access for:", { taskId, userId: req.user?.uid });
+    console.log("🔐 Checking task access for:", {
+      taskId,
+      userId: req.user?.uid,
+    });
 
     const snap = await adminDb.collection("tasks").doc(taskId).get();
     if (!snap.exists) {

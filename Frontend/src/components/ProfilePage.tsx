@@ -311,11 +311,7 @@ export function ProfilePage() {
           <>
             <div className="profile-header">
               <div className="profile-avatar">
-                <Avatar 
-                  src={avatarPreviewUrl} 
-                  alt={displayName} 
-                  size={80} 
-                />
+                <Avatar src={avatarPreviewUrl} alt={displayName} size={80} />
               </div>
               <div>
                 <h2 className="profile-heading">{displayName}</h2>

@@ -763,9 +763,16 @@ export function TaskDetailsScreen({
                   onClick={() => handleProfileClick(task.ownerId!, "Owner")}
                   title={`${profileData[task.ownerId].username || profileData[task.ownerId].email} (Owner)`}
                 >
-                  <Avatar 
-                    src={profileData[task.ownerId].avatar_data || profileData[task.ownerId].avatar_url}
-                    alt={profileData[task.ownerId].username || profileData[task.ownerId].email || "Owner"}
+                  <Avatar
+                    src={
+                      profileData[task.ownerId].avatar_data ||
+                      profileData[task.ownerId].avatar_url
+                    }
+                    alt={
+                      profileData[task.ownerId].username ||
+                      profileData[task.ownerId].email ||
+                      "Owner"
+                    }
                     size={32}
                   />
                 </div>
@@ -787,7 +794,7 @@ export function TaskDetailsScreen({
                         }
                         title={`User ${collaboratorId.slice(0, 8)} (Collaborator)`}
                       >
-                        <Avatar 
+                        <Avatar
                           src={null}
                           alt={`User ${collaboratorId.slice(0, 8)}`}
                           size={32}
@@ -805,9 +812,11 @@ export function TaskDetailsScreen({
                       }
                       title={`${profile.username || profile.email} (Collaborator)`}
                     >
-                      <Avatar 
+                      <Avatar
                         src={profile.avatar_data || profile.avatar_url}
-                        alt={profile.username || profile.email || "Collaborator"}
+                        alt={
+                          profile.username || profile.email || "Collaborator"
+                        }
                         size={32}
                       />
                     </div>

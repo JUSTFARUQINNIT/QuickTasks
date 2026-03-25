@@ -36,7 +36,13 @@ export function ProfileModal({
     profile.email;
 
   const getAvatarContent = () => {
-    return <Avatar src={profile.avatarData || profile.avatarUrl} alt={profile.name} size={80} />;
+    return (
+      <Avatar
+        src={profile.avatarData || profile.avatarUrl}
+        alt={profile.name}
+        size={80}
+      />
+    );
   };
 
   return (

@@ -157,7 +157,8 @@ export async function uploadBufferToGoogleDrive({
       driveFileId: fileMeta.data.id,
       name: fileMeta.data.name || fileName,
       size: Number(fileMeta.data.size || 0),
-      mimeType: fileMeta.data.mimeType || mimeType || "application/octet-stream",
+      mimeType:
+        fileMeta.data.mimeType || mimeType || "application/octet-stream",
       iconLink: fileMeta.data.iconLink || null,
       thumbnailLink: fileMeta.data.thumbnailLink || null,
       viewUrl: fileMeta.data.webViewLink || null,

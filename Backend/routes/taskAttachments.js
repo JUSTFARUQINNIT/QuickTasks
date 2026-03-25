@@ -11,7 +11,9 @@ import {
 
 const router = express.Router();
 
-const MAX_UPLOAD_SIZE_BYTES = Number(process.env.MAX_UPLOAD_SIZE_BYTES || 10485760);
+const MAX_UPLOAD_SIZE_BYTES = Number(
+  process.env.MAX_UPLOAD_SIZE_BYTES || 10485760,
+);
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: MAX_UPLOAD_SIZE_BYTES },
@@ -70,7 +72,9 @@ router.post(
       if (!driveUpload.downloadUrl) {
         return res
           .status(502)
-          .json({ error: "File uploaded but no public download URL was returned" });
+          .json({
+            error: "File uploaded but no public download URL was returned",
+          });
       }
 
       const attachment = {
@@ -89,9 +93,12 @@ router.post(
         createdAt: new Date().toISOString(),
       };
 
-      await adminDb.collection("tasks").doc(taskId).update({
-        attachments: FieldValue.arrayUnion(attachment),
-      });
+      await adminDb
+        .collection("tasks")
+        .doc(taskId)
+        .update({
+          attachments: FieldValue.arrayUnion(attachment),
+        });
 
       return res.status(201).json({
         ok: true,
@@ -100,8 +107,7 @@ router.post(
     } catch (error) {
       console.error("Task attachment upload error:", error);
       return res.status(500).json({
-        error:
-          error?.message || "Failed to upload attachment to Google Drive",
+        error: error?.message || "Failed to upload attachment to Google Drive",
       });
     }
   },
@@ -137,7 +143,9 @@ router.delete(
       const file = { uploadedBy: normalized.uploadedBy };
 
       if (!canDeleteFile(user, task, file)) {
-        return res.status(403).json({ error: "Unauthorized to delete this file" });
+        return res
+          .status(403)
+          .json({ error: "Unauthorized to delete this file" });
       }
 
       if (!normalized.driveFileId) {
@@ -148,7 +156,9 @@ router.delete(
 
       await deleteGoogleDriveFile(normalized.driveFileId);
 
-      const nextAttachments = attachments.filter((item) => item.id !== attachmentId);
+      const nextAttachments = attachments.filter(
+        (item) => item.id !== attachmentId,
+      );
       await taskRef.update({ attachments: nextAttachments });
 
       return res.json({ ok: true });
@@ -156,7 +166,9 @@ router.delete(
       console.error("Task attachment delete error:", error);
       return res
         .status(500)
-        .json({ error: error?.message || "Failed to delete file from Google Drive" });
+        .json({
+          error: error?.message || "Failed to delete file from Google Drive",
+        });
     }
   },
 );

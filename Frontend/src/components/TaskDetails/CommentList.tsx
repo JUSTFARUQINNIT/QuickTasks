@@ -24,15 +24,22 @@ export function CommentList({ comments, onReply }: CommentListProps) {
   }
 
   const topLevelComments = comments.filter((c) => !c.parentId);
-  const repliesByParentId = comments.reduce((acc, c) => {
-    if (c.parentId) {
-      if (!acc[c.parentId]) acc[c.parentId] = [];
-      acc[c.parentId].push(c);
-    }
-    return acc;
-  }, {} as Record<string, Comment[]>);
+  const repliesByParentId = comments.reduce(
+    (acc, c) => {
+      if (c.parentId) {
+        if (!acc[c.parentId]) acc[c.parentId] = [];
+        acc[c.parentId].push(c);
+      }
+      return acc;
+    },
+    {} as Record<string, Comment[]>,
+  );
 
-  const renderComment = (c: Comment, isReply = false, parentIdForReply?: string) => (
+  const renderComment = (
+    c: Comment,
+    isReply = false,
+    parentIdForReply?: string,
+  ) => (
     <li
       key={c.id}
       className={`comment-item ${isReply ? "comment-reply" : ""}`}
@@ -104,9 +111,14 @@ export function CommentList({ comments, onReply }: CommentListProps) {
       }}
     >
       {topLevelComments.map((c) => (
-        <div key={`thread-${c.id}`} style={{ borderBottom: "1px solid #1f2937", paddingBottom: "8px" }}>
+        <div
+          key={`thread-${c.id}`}
+          style={{ borderBottom: "1px solid #1f2937", paddingBottom: "8px" }}
+        >
           {renderComment(c, false)}
-          {repliesByParentId[c.id]?.map((reply) => renderComment(reply, true, c.id))}
+          {repliesByParentId[c.id]?.map((reply) =>
+            renderComment(reply, true, c.id),
+          )}
         </div>
       ))}
     </ul>

@@ -45,6 +45,8 @@ import {
   HiOutlineUserPlus,
 } from "react-icons/hi2";
 import { Avatar } from "./components/Avatar";
+import { LandingPage } from "./components/LandingPage";
+import { AboutPage } from "./components/AboutPage";
 import { AuthView } from "./components/AuthView";
 import { ResetPasswordView } from "./components/ResetPasswordView";
 import { TasksPage } from "./components/TasksPage";
@@ -919,13 +921,15 @@ function App() {
   if (!profile) {
     return (
       <Routes>
+        <Route path="/" element={<LandingPage />} />
+        <Route path="/about" element={<AboutPage />} />
         <Route path="/signin" element={<AuthView mode="signin" />} />
         <Route path="/signup" element={<AuthView mode="signup" />} />
         <Route
           path="/reset-password"
           element={<ResetPasswordView onDone={handlePasswordResetDone} />}
         />
-        <Route path="*" element={<Navigate to="/signin" replace />} />
+        <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     );
   }
@@ -1157,10 +1161,10 @@ function App() {
               className="topbar-avatar"
               aria-label="Profile"
             >
-              <Avatar 
-                src={profile.avatar_data || profile.avatar_url} 
-                alt={displayName} 
-                size={34} 
+              <Avatar
+                src={profile.avatar_data || profile.avatar_url}
+                alt={displayName}
+                size={34}
               />
             </NavLink>
           </div>
@@ -1184,6 +1188,8 @@ function App() {
               <Route path="/settings" element={<ProfilePage />} />
               <Route path="/notifications" element={<NotificationsPage />} />
               <Route path="/invitations" element={<InvitationsPage />} />
+              <Route path="/contact" element={<LandingPage />} />
+              <Route path="/about" element={<AboutPage />} />
               <Route path="*" element={<Navigate to="/dashboard" replace />} />
             </Routes>
           </ErrorBoundary>

@@ -1,9 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import {
-  doc,
-  getDoc,
-} from "firebase/firestore";
+import { doc, getDoc } from "firebase/firestore";
 import { auth, db } from "../lib/firebaseClient";
 import { CommentList } from "./TaskDetails/CommentList";
 import { CommentInput } from "./TaskDetails/CommentInput";
@@ -22,11 +19,21 @@ export function TaskCommentsPage() {
 
   const [taskTitle, setTaskTitle] = useState<string>("Task comments");
   const [comments, setComments] = useState<
-    { id: string; userLabel: string; text: string; createdAt: string; parentId?: string; userAvatar?: string; }[]
+    {
+      id: string;
+      userLabel: string;
+      text: string;
+      createdAt: string;
+      parentId?: string;
+      userAvatar?: string;
+    }[]
   >([]);
   const [newComment, setNewComment] = useState("");
   const [commentSaving, setCommentSaving] = useState(false);
-  const [replyingTo, setReplyingTo] = useState<{ id: string; userLabel: string } | null>(null);
+  const [replyingTo, setReplyingTo] = useState<{
+    id: string;
+    userLabel: string;
+  } | null>(null);
 
   useEffect(() => {
     if (!taskId) return;
@@ -60,9 +67,12 @@ export function TaskCommentsPage() {
         console.log("🔑 Getting auth token for manual fetch");
         const token = await user.getIdToken();
         const apiBase = getApiBaseUrl();
-        
-        console.log("🌐 Making manual fetch request to:", `${apiBase}/api/tasks/${encodeURIComponent(taskId)}/comments`);
-        
+
+        console.log(
+          "🌐 Making manual fetch request to:",
+          `${apiBase}/api/tasks/${encodeURIComponent(taskId)}/comments`,
+        );
+
         const res = await fetch(
           `${apiBase}/api/tasks/${encodeURIComponent(taskId)}/comments`,
           {
@@ -72,15 +82,21 @@ export function TaskCommentsPage() {
             },
           },
         );
-        
-        console.log("📡 Manual fetch response:", { status: res.status, ok: res.ok });
-        
+
+        console.log("📡 Manual fetch response:", {
+          status: res.status,
+          ok: res.ok,
+        });
+
         if (!res.ok) {
           const errorText = await res.text();
-          console.error("❌ Manual fetch failed:", { status: res.status, errorText });
+          console.error("❌ Manual fetch failed:", {
+            status: res.status,
+            errorText,
+          });
           return;
         }
-        
+
         const data = await res.json();
         console.log("📥 Manual fetch on load response:", data);
         // Transform the data to match the frontend format
@@ -114,10 +130,10 @@ export function TaskCommentsPage() {
       }
     };
 
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-    
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
     return () => {
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
   }, [taskId]);
 
@@ -133,8 +149,12 @@ export function TaskCommentsPage() {
     try {
       const token = await user.getIdToken();
       const apiBase = getApiBaseUrl();
-      
-      console.log("🚀 Submitting comment:", { taskId, commentText: trimmed, parentId: replyingTo?.id });
+
+      console.log("🚀 Submitting comment:", {
+        taskId,
+        commentText: trimmed,
+        parentId: replyingTo?.id,
+      });
 
       const res = await fetch(
         `${apiBase}/api/tasks/${encodeURIComponent(taskId)}/comments`,
@@ -144,46 +164,53 @@ export function TaskCommentsPage() {
             "Content-Type": "application/json",
             Authorization: `Bearer ${token}`,
           },
-          body: JSON.stringify({ commentText: trimmed, parentId: replyingTo?.id }),
+          body: JSON.stringify({
+            commentText: trimmed,
+            parentId: replyingTo?.id,
+          }),
         },
       );
-      
-      console.log("📡 Comment submission response:", { status: res.status, ok: res.ok });
-      
+
+      console.log("📡 Comment submission response:", {
+        status: res.status,
+        ok: res.ok,
+      });
+
       if (!res.ok) {
-        const body = (await res.json().catch(() => null)) as
-          | { error?: string }
-          | null;
+        const body = (await res.json().catch(() => null)) as {
+          error?: string;
+        } | null;
         throw new Error(body?.error ?? "Failed to add comment.");
       }
-      
+
       const responseData = await res.json();
       console.log("✅ Comment saved successfully:", responseData);
-      
+
       // Immediately add the new comment to the UI for instant feedback
       const newCommentData = {
         id: responseData.id,
-        userLabel: auth.currentUser?.displayName || auth.currentUser?.email || "You",
+        userLabel:
+          auth.currentUser?.displayName || auth.currentUser?.email || "You",
         text: responseData.commentText,
         createdAt: responseData.createdAt,
         parentId: responseData.parentId || undefined,
         userAvatar: auth.currentUser?.photoURL || undefined,
       };
-      
-      setComments(prev => [...prev, newCommentData].sort((a, b) => {
-        if (a.createdAt > b.createdAt) return -1;
-        if (a.createdAt < b.createdAt) return 1;
-        return 0;
-      }));
-      
+
+      setComments((prev) =>
+        [...prev, newCommentData].sort((a, b) => {
+          if (a.createdAt > b.createdAt) return -1;
+          if (a.createdAt < b.createdAt) return 1;
+          return 0;
+        }),
+      );
+
       setNewComment("");
       setReplyingTo(null);
-      
+
       // Remove the manual fallback since we're updating immediately
-      
     } catch (err) {
-      const msg =
-        err instanceof Error ? err.message : "Could not add comment.";
+      const msg = err instanceof Error ? err.message : "Could not add comment.";
       console.error("❌ Comment submission error:", msg, err);
     } finally {
       setCommentSaving(false);
@@ -209,9 +236,9 @@ export function TaskCommentsPage() {
         </div>
 
         <div className="task-details-comments-page">
-          <CommentList 
-            comments={comments} 
-            onReply={(id, userLabel) => setReplyingTo({ id, userLabel })} 
+          <CommentList
+            comments={comments}
+            onReply={(id, userLabel) => setReplyingTo({ id, userLabel })}
           />
           <div style={{ marginTop: 16 }}>
             <CommentInput
@@ -228,4 +255,3 @@ export function TaskCommentsPage() {
     </div>
   );
 }
-

@@ -25,9 +25,35 @@ export function CommentInput({
   return (
     <div className="comment-input">
       {replyingTo ? (
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8, padding: '4px 8px', backgroundColor: '#374151', borderRadius: 4, fontSize: 13, color: '#d1d5db' }}>
-          <span>Replying to <strong>{replyingTo.userLabel}</strong></span>
-          <button type="button" onClick={onCancelReply} style={{ background: 'transparent', border: 'none', color: '#9ca3af', cursor: 'pointer', fontSize: 16 }}>&times;</button>
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            marginBottom: 8,
+            padding: "4px 8px",
+            backgroundColor: "#374151",
+            borderRadius: 4,
+            fontSize: 13,
+            color: "#d1d5db",
+          }}
+        >
+          <span>
+            Replying to <strong>{replyingTo.userLabel}</strong>
+          </span>
+          <button
+            type="button"
+            onClick={onCancelReply}
+            style={{
+              background: "transparent",
+              border: "none",
+              color: "#9ca3af",
+              cursor: "pointer",
+              fontSize: 16,
+            }}
+          >
+            &times;
+          </button>
         </div>
       ) : (
         <label htmlFor="new-comment">Add a comment</label>
