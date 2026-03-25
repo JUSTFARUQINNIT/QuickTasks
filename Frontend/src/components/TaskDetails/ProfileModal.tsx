@@ -8,6 +8,7 @@ type ProfileModalProps = {
   onRemoveCollaborator?: (userId: string) => void;
   profile: {
     id: string;
+    username: string;
     name: string;
     email: string;
     avatarUrl?: string | null;
@@ -34,6 +35,12 @@ export function ProfileModal({
       .toUpperCase()
       .slice(0, 2);
   };
+
+  const displayName =
+    profile.name?.trim() ||
+    profile.username?.trim() ||
+    profile.email.split("@")[0] ||
+    profile.email;
 
   const getAvatarContent = () => {
     if (profile.avatarData || profile.avatarUrl) {
@@ -63,7 +70,7 @@ export function ProfileModal({
           <div className="profile-modal-avatar">{getAvatarContent()}</div>
 
           <div className="profile-modal-info">
-            <h3 className="profile-modal-name">{profile.name}</h3>
+            <div className="">{displayName}</div>
             <p className="profile-modal-email">{profile.email}</p>
           </div>
         </div>
@@ -89,9 +96,7 @@ export function ProfileModal({
               disabled={isRemovingCollaborator}
             >
               <HiUserMinus style={{ marginRight: "8px" }} />
-              {isRemovingCollaborator
-                ? "Removing..."
-                : "Remove Collaborator"}
+              {isRemovingCollaborator ? "Removing..." : "Remove Collaborator"}
             </button>
           )}
         </div>
