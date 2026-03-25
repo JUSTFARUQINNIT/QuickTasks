@@ -904,7 +904,7 @@ export function TaskDetailsScreen({
                       </div>
 
                       <div className="task-file-info">
-                        {/* <div className="task-file-name">{displayName}</div> */}
+                        <div className="task-file-name">{displayName}</div>
                         <div className="task-file-meta">
                           <span className="task-file-size">
                             {((attachment.size || 0) / 1024).toFixed(1)} KB
