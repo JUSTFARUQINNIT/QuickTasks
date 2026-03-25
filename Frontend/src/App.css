@@ -2636,8 +2636,9 @@
 .profile-modal-header {
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: 10px;
   margin-bottom: 20px;
+  margin-top: 15px;
 }
 
 .profile-modal-avatar {
@@ -2668,10 +2669,12 @@
 }
 
 .profile-modal-name {
-  font-size: 1.2rem;
+  font-size: 1.10rem;
   font-weight: 600;
   color: var(--qt-text);
   margin: 0 0 4px;
+  max-width: 90%;
+  word-wrap: break-word;
 }
 
 .profile-modal-email {
@@ -2699,6 +2702,7 @@
 
 .profile-modal-actions {
   display: flex;
+  flex-direction: column;
   gap: 12px;
 }
 
@@ -2714,6 +2718,7 @@
   cursor: pointer;
   transition: all 0.15s ease;
   text-align: center;
+  width: 100%;
 }
 
 .profile-modal-btn:hover {
@@ -2928,7 +2933,7 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  max-width: 200px;
+  max-width: 130px;
 }
 
 .task-file-meta {
