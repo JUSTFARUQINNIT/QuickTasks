@@ -8,7 +8,7 @@ type ProfileModalProps = {
   onRemoveCollaborator?: (userId: string) => void;
   profile: {
     id: string;
-    username: string;
+    username?: string;
     name: string;
     email: string;
     avatarUrl?: string | null;

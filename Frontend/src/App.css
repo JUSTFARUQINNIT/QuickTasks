@@ -2673,8 +2673,6 @@
   font-weight: 600;
   color: var(--qt-text);
   margin: 0 0 4px;
-  max-width: 90%;
-  word-wrap: break-word;
 }
 
 .profile-modal-email {
