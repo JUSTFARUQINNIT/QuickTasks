@@ -1,5 +1,7 @@
 import { HiXMark, HiEnvelope, HiUserMinus } from "react-icons/hi2";
 
+import { Avatar } from "../Avatar";
+
 type ProfileModalProps = {
   isOpen: boolean;
   onClose: () => void;
@@ -27,15 +29,6 @@ export function ProfileModal({
 }: ProfileModalProps) {
   if (!isOpen || !profile) return null;
 
-  const getInitials = (name: string) => {
-    return name
-      .split(" ")
-      .map((word) => word.charAt(0))
-      .join("")
-      .toUpperCase()
-      .slice(0, 2);
-  };
-
   const displayName =
     profile.name?.trim() ||
     profile.username?.trim() ||
@@ -43,16 +36,7 @@ export function ProfileModal({
     profile.email;
 
   const getAvatarContent = () => {
-    if (profile.avatarData || profile.avatarUrl) {
-      return (
-        <img
-          src={profile.avatarData || profile.avatarUrl || ""}
-          alt={profile.name}
-          className="profile-modal-avatar-img"
-        />
-      );
-    }
-    return getInitials(profile.name);
+    return <Avatar src={profile.avatarData || profile.avatarUrl} alt={profile.name} size={80} />;
   };
 
   return (

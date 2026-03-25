@@ -1,13 +1,8 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import {
-  collection,
   doc,
   getDoc,
-  onSnapshot,
-  orderBy,
-  query,
-  where,
 } from "firebase/firestore";
 import { auth, db } from "../lib/firebaseClient";
 import { CommentList } from "./TaskDetails/CommentList";
@@ -17,13 +12,17 @@ type RouteParams = {
   taskId: string;
 };
 
+function getApiBaseUrl() {
+  return import.meta.env.VITE_API_URL || "http://localhost:8787";
+}
+
 export function TaskCommentsPage() {
   const { taskId } = useParams<RouteParams>();
   const navigate = useNavigate();
 
   const [taskTitle, setTaskTitle] = useState<string>("Task comments");
   const [comments, setComments] = useState<
-    { id: string; userLabel: string; text: string; createdAt: string; parentId?: string; }[]
+    { id: string; userLabel: string; text: string; createdAt: string; parentId?: string; userAvatar?: string; }[]
   >([]);
   const [newComment, setNewComment] = useState("");
   const [commentSaving, setCommentSaving] = useState(false);
@@ -47,57 +46,79 @@ export function TaskCommentsPage() {
   useEffect(() => {
     if (!taskId) return;
 
-    const q = query(
-      collection(db, "task_comments"),
-      where("task_id", "==", taskId),
-      orderBy("created_at", "asc"),
-    );
+    console.log("🔧 Setting up comments listener for task:", taskId);
 
-    const unsub = onSnapshot(q, async (snap) => {
-      const items: {
-        id: string;
-        userLabel: string;
-        text: string;
-        createdAt: string;
-      }[] = [];
-
-      for (const d of snap.docs) {
-        const data = d.data() as {
-          user_id?: string;
-          comment_text?: string;
-          created_at?: string;
-          parent_id?: string;
-        };
-        let userLabel = data.user_id ?? "Unknown user";
-        if (data.user_id) {
-          try {
-            const pref = doc(collection(db, "profiles"), data.user_id);
-            const psnap = await getDoc(pref);
-            if (psnap.exists()) {
-              const pdata = psnap.data() as {
-                email?: string | null;
-                username?: string | null;
-              };
-              userLabel =
-                pdata.username ?? pdata.email ?? (data.user_id as string);
-            }
-          } catch {
-            // ignore
-          }
+    // Manual fetch on page load as fallback
+    const fetchCommentsOnLoad = async () => {
+      try {
+        const user = auth.currentUser;
+        if (!user) {
+          console.log("❌ No user authenticated for manual fetch");
+          return;
         }
-        items.push({
-          id: d.id,
-          userLabel,
-          text: data.comment_text ?? "",
-          createdAt: data.created_at ?? "",
-          parentId: data.parent_id ?? undefined,
-        });
+
+        console.log("🔑 Getting auth token for manual fetch");
+        const token = await user.getIdToken();
+        const apiBase = getApiBaseUrl();
+        
+        console.log("🌐 Making manual fetch request to:", `${apiBase}/api/tasks/${encodeURIComponent(taskId)}/comments`);
+        
+        const res = await fetch(
+          `${apiBase}/api/tasks/${encodeURIComponent(taskId)}/comments`,
+          {
+            method: "GET",
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
+          },
+        );
+        
+        console.log("📡 Manual fetch response:", { status: res.status, ok: res.ok });
+        
+        if (!res.ok) {
+          const errorText = await res.text();
+          console.error("❌ Manual fetch failed:", { status: res.status, errorText });
+          return;
+        }
+        
+        const data = await res.json();
+        console.log("📥 Manual fetch on load response:", data);
+        // Transform the data to match the frontend format
+        const transformedComments = data.comments.map((c: any) => ({
+          id: c.id,
+          userLabel: c.user?.name || "Unknown user",
+          text: c.commentText,
+          createdAt: c.createdAt,
+          parentId: c.parentId || undefined,
+          userAvatar: c.user?.avatarUrl || undefined,
+        }));
+        setComments(transformedComments);
+        console.log("✅ Comments loaded manually:", transformedComments);
+      } catch (err) {
+        console.error("❌ Manual fetch on load error:", err);
       }
+    };
 
-      setComments(items);
-    });
+    // Fetch immediately on load
+    void fetchCommentsOnLoad();
 
-    return () => unsub();
+    // Note: Real-time listener disabled due to Firebase permission issues
+    // Manual fetch provides reliable loading and instant updates via optimistic UI
+    console.log("📡 Real-time listener disabled - using manual fetch only");
+
+    // Also refresh when page gets focus (user navigates back)
+    const handleVisibilityChange = () => {
+      if (!document.hidden && taskId) {
+        console.log("🔄 Page became visible, refreshing comments");
+        void fetchCommentsOnLoad();
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
   }, [taskId]);
 
   async function handleAddComment() {
@@ -111,7 +132,9 @@ export function TaskCommentsPage() {
     setCommentSaving(true);
     try {
       const token = await user.getIdToken();
-      const apiBase = import.meta.env.VITE_API_BASE_URL;
+      const apiBase = getApiBaseUrl();
+      
+      console.log("🚀 Submitting comment:", { taskId, commentText: trimmed, parentId: replyingTo?.id });
 
       const res = await fetch(
         `${apiBase}/api/tasks/${encodeURIComponent(taskId)}/comments`,
@@ -124,18 +147,44 @@ export function TaskCommentsPage() {
           body: JSON.stringify({ commentText: trimmed, parentId: replyingTo?.id }),
         },
       );
+      
+      console.log("📡 Comment submission response:", { status: res.status, ok: res.ok });
+      
       if (!res.ok) {
         const body = (await res.json().catch(() => null)) as
           | { error?: string }
           | null;
         throw new Error(body?.error ?? "Failed to add comment.");
       }
+      
+      const responseData = await res.json();
+      console.log("✅ Comment saved successfully:", responseData);
+      
+      // Immediately add the new comment to the UI for instant feedback
+      const newCommentData = {
+        id: responseData.id,
+        userLabel: auth.currentUser?.displayName || auth.currentUser?.email || "You",
+        text: responseData.commentText,
+        createdAt: responseData.createdAt,
+        parentId: responseData.parentId || undefined,
+        userAvatar: auth.currentUser?.photoURL || undefined,
+      };
+      
+      setComments(prev => [...prev, newCommentData].sort((a, b) => {
+        if (a.createdAt > b.createdAt) return -1;
+        if (a.createdAt < b.createdAt) return 1;
+        return 0;
+      }));
+      
       setNewComment("");
       setReplyingTo(null);
+      
+      // Remove the manual fallback since we're updating immediately
+      
     } catch (err) {
       const msg =
         err instanceof Error ? err.message : "Could not add comment.";
-      console.error(msg);
+      console.error("❌ Comment submission error:", msg, err);
     } finally {
       setCommentSaving(false);
     }

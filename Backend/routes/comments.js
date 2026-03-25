@@ -5,6 +5,36 @@ import { requireAuth, requireTaskAccess } from "../utils/authMiddleware.js";
 const router = express.Router();
 
 router.get(
+  "/debug/:taskId/comments",
+  async (req, res) => {
+    try {
+      const { taskId } = req.params;
+      console.log("🔍 Debug: Checking comments for task:", taskId);
+
+      const allComments = await adminDb
+        .collection("task_comments")
+        .where("task_id", "==", taskId)
+        .get();
+
+      const result = {
+        taskId,
+        totalComments: allComments.docs.length,
+        comments: allComments.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        }))
+      };
+
+      console.log("🔍 Debug result:", result);
+      return res.json(result);
+    } catch (e) {
+      console.error("🔍 Debug error:", e);
+      return res.status(500).json({ error: e.message });
+    }
+  }
+);
+
+router.get(
   "/:taskId/comments",
   requireAuth,
   requireTaskAccess,
@@ -12,13 +42,29 @@ router.get(
     try {
       const { taskId } = req.params;
 
+      console.log("📥 Backend: Fetching comments for task:", taskId);
+
       const snap = await adminDb
         .collection("task_comments")
         .where("task_id", "==", taskId)
-        .orderBy("created_at", "asc")
         .get();
 
+      console.log("📊 Backend: Found", snap.docs.length, "comments for task:", taskId);
+      
+      // Debug: Check if any comments exist for this task at all
+      const allCommentsSnap = await adminDb
+        .collection("task_comments")
+        .where("task_id", "==", taskId)
+        .get();
+      console.log("🔍 All comments check:", {
+        taskId,
+        totalFound: allCommentsSnap.docs.length,
+        commentIds: allCommentsSnap.docs.map(d => d.id),
+        commentData: allCommentsSnap.docs.map(d => ({ id: d.id, task_id: d.data().task_id, created_at: d.data().created_at }))
+      });
+
       if (snap.empty) {
+        console.log("📭 Backend: No comments found, returning empty array");
         return res.json({ ok: true, comments: [] });
       }
 
@@ -30,6 +76,15 @@ router.get(
         comments.push({ id: doc.id, ...data });
         if (data.user_id) userIds.add(data.user_id);
       });
+
+      // Sort manually by created_at since we can't use orderBy without index
+      comments.sort((a, b) => {
+        const aTime = a.created_at || "";
+        const bTime = b.created_at || "";
+        return aTime.localeCompare(bTime);
+      });
+
+      console.log("👥 Backend: User IDs to fetch profiles for:", Array.from(userIds));
 
       const profilesMap = new Map();
       if (userIds.size > 0) {
@@ -47,6 +102,8 @@ router.get(
         });
       }
 
+      console.log("👤 Backend: Profiles map:", Object.fromEntries(profilesMap));
+
       const enriched = comments.map((c) => {
         const profile = profilesMap.get(c.user_id) || {};
         return {
@@ -63,9 +120,10 @@ router.get(
         };
       });
 
+      console.log("✨ Backend: Enriched comments:", enriched);
       return res.json({ ok: true, comments: enriched });
     } catch (e) {
-      console.error("Fetch comments error:", e);
+      console.error("❌ Backend: Fetch comments error:", e);
       return res.status(500).json({ error: "Failed to load comments" });
     }
   },
@@ -80,6 +138,8 @@ router.post(
       const { taskId } = req.params;
       const { commentText, parentId } = req.body || {};
       const uid = req.user.uid;
+
+      console.log("🚀 Backend: Creating comment:", { taskId, commentText, parentId, userId: uid });
 
       const trimmed = String(commentText ?? "").trim();
       if (!trimmed) {
@@ -100,9 +160,13 @@ router.post(
         commentData.parent_id = parentId;
       }
 
-      const docRef = await adminDb.collection("task_comments").add(commentData);
+      console.log("💾 Backend: Saving comment data:", commentData);
 
-      return res.status(201).json({
+      const docRef = await adminDb.collection("task_comments").add(commentData);
+      
+      console.log("✅ Backend: Comment saved with ID:", docRef.id);
+
+      const responseData = {
         ok: true,
         id: docRef.id,
         taskId,
@@ -110,9 +174,12 @@ router.post(
         commentText: trimmed,
         createdAt: nowIso,
         parentId: parentId || null,
-      });
+      };
+      
+      console.log("📤 Backend: Sending response:", responseData);
+      return res.status(201).json(responseData);
     } catch (e) {
-      console.error("Create comment error:", e);
+      console.error("❌ Backend: Create comment error:", e);
       return res.status(500).json({ error: "Failed to create comment" });
     }
   },

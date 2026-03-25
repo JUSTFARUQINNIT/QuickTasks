@@ -1,9 +1,12 @@
+import { Avatar } from "../Avatar";
+
 type Comment = {
   id: string;
   userLabel: string;
   text: string;
   createdAt: string;
   parentId?: string;
+  userAvatar?: string;
 };
 
 type CommentListProps = {
@@ -49,10 +52,14 @@ export function CommentList({ comments, onReply }: CommentListProps) {
           justifyContent: "space-between",
           fontSize: 12,
           color: "#9ca3af",
-          marginBottom: 2,
+          marginBottom: 4,
+          alignItems: "center",
         }}
       >
-        <span>{c.userLabel}</span>
+        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+          <Avatar src={c.userAvatar} alt={c.userLabel} size={24} />
+          <span>{c.userLabel}</span>
+        </div>
         {c.createdAt && (
           <span>
             {new Date(c.createdAt).toLocaleString(undefined, {

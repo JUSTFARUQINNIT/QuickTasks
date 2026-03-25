@@ -50,6 +50,8 @@ type TaskDetailsScreenProps = {
   onOpenComments: () => void;
 };
 
+import { Avatar } from "../Avatar";
+
 export function TaskDetailsScreen({
   task,
   isOwner,
@@ -761,28 +763,11 @@ export function TaskDetailsScreen({
                   onClick={() => handleProfileClick(task.ownerId!, "Owner")}
                   title={`${profileData[task.ownerId].username || profileData[task.ownerId].email} (Owner)`}
                 >
-                  {profileData[task.ownerId].avatar_data ||
-                  profileData[task.ownerId].avatar_url ? (
-                    <img
-                      src={
-                        profileData[task.ownerId].avatar_data ||
-                        profileData[task.ownerId].avatar_url ||
-                        ""
-                      }
-                      alt={
-                        profileData[task.ownerId].username ||
-                        profileData[task.ownerId].email
-                      }
-                    />
-                  ) : (
-                    (
-                      profileData[task.ownerId].username ||
-                      profileData[task.ownerId].email ||
-                      "U"
-                    )
-                      .charAt(0)
-                      .toUpperCase()
-                  )}
+                  <Avatar 
+                    src={profileData[task.ownerId].avatar_data || profileData[task.ownerId].avatar_url}
+                    alt={profileData[task.ownerId].username || profileData[task.ownerId].email || "Owner"}
+                    size={32}
+                  />
                 </div>
               )}
 
@@ -802,7 +787,11 @@ export function TaskDetailsScreen({
                         }
                         title={`User ${collaboratorId.slice(0, 8)} (Collaborator)`}
                       >
-                        {`U${collaboratorId.slice(0, 8)}`}
+                        <Avatar 
+                          src={null}
+                          alt={`User ${collaboratorId.slice(0, 8)}`}
+                          size={32}
+                        />
                       </div>
                     );
                   }
@@ -816,16 +805,11 @@ export function TaskDetailsScreen({
                       }
                       title={`${profile.username || profile.email} (Collaborator)`}
                     >
-                      {profile.avatar_data || profile.avatar_url ? (
-                        <img
-                          src={profile.avatar_data || profile.avatar_url || ""}
-                          alt={profile.username || profile.email}
-                        />
-                      ) : (
-                        (profile.username || profile.email || "C")
-                          .charAt(0)
-                          .toUpperCase()
-                      )}
+                      <Avatar 
+                        src={profile.avatar_data || profile.avatar_url}
+                        alt={profile.username || profile.email || "Collaborator"}
+                        size={32}
+                      />
                     </div>
                   );
                 })}
@@ -840,9 +824,15 @@ export function TaskDetailsScreen({
               {/* Fallback if no data loaded yet */}
               {(!profileData || Object.keys(profileData).length === 0) && (
                 <>
-                  <div className="task-member-avatar">U</div>
-                  <div className="task-member-avatar">T</div>
-                  <div className="task-member-avatar">S</div>
+                  <div className="task-member-avatar">
+                    <Avatar src={null} alt="User" size={32} />
+                  </div>
+                  <div className="task-member-avatar">
+                    <Avatar src={null} alt="Task" size={32} />
+                  </div>
+                  <div className="task-member-avatar">
+                    <Avatar src={null} alt="System" size={32} />
+                  </div>
                 </>
               )}
             </div>

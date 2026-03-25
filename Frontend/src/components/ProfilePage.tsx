@@ -14,6 +14,8 @@ type Profile = {
   notification_email?: boolean | null;
 };
 
+import { Avatar } from "./Avatar";
+
 export function ProfilePage() {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [username, setUsername] = useState("");
@@ -309,11 +311,11 @@ export function ProfilePage() {
           <>
             <div className="profile-header">
               <div className="profile-avatar">
-                {avatarPreviewUrl ? (
-                  <img src={avatarPreviewUrl} alt={displayName} />
-                ) : (
-                  <span>{(displayName[0] ?? "U").toUpperCase()}</span>
-                )}
+                <Avatar 
+                  src={avatarPreviewUrl} 
+                  alt={displayName} 
+                  size={80} 
+                />
               </div>
               <div>
                 <h2 className="profile-heading">{displayName}</h2>

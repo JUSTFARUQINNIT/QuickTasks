@@ -44,6 +44,7 @@ import {
   HiOutlineUserCircle,
   HiOutlineUserPlus,
 } from "react-icons/hi2";
+import { Avatar } from "./components/Avatar";
 import { AuthView } from "./components/AuthView";
 import { ResetPasswordView } from "./components/ResetPasswordView";
 import { TasksPage } from "./components/TasksPage";
@@ -1156,14 +1157,11 @@ function App() {
               className="topbar-avatar"
               aria-label="Profile"
             >
-              {profile.avatar_data || profile.avatar_url ? (
-                <img
-                  src={profile.avatar_data || profile.avatar_url || ""}
-                  alt={displayName}
-                />
-              ) : (
-                <HiOutlineUserCircle />
-              )}
+              <Avatar 
+                src={profile.avatar_data || profile.avatar_url} 
+                alt={displayName} 
+                size={34} 
+              />
             </NavLink>
           </div>
         </header>
