@@ -95,9 +95,10 @@ router.get(
         profileSnaps.forEach((pSnap) => {
           if (!pSnap.exists) return;
           const data = pSnap.data() || {};
+          console.log("🔍 Profile data for user:", pSnap.id, data);
           profilesMap.set(pSnap.id, {
             name: data.username || data.name || data.email || "Unknown user",
-            avatarUrl: data.avatarUrl || null,
+            avatarUrl: data.avatar_data || data.avatar_url || null,
           });
         });
       }
