@@ -3,6 +3,8 @@ type CommentInputProps = {
   onChange: (value: string) => void;
   onSubmit: () => void;
   loading: boolean;
+  replyingTo?: { id: string; userLabel: string } | null;
+  onCancelReply?: () => void;
 };
 
 export function CommentInput({
@@ -10,6 +12,8 @@ export function CommentInput({
   onChange,
   onSubmit,
   loading,
+  replyingTo,
+  onCancelReply,
 }: CommentInputProps) {
   function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
     if ((e.metaKey || e.ctrlKey) && e.key === "Enter" && value.trim()) {
@@ -20,7 +24,14 @@ export function CommentInput({
 
   return (
     <div className="comment-input">
-      <label htmlFor="new-comment">Add a comment</label>
+      {replyingTo ? (
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8, padding: '4px 8px', backgroundColor: '#374151', borderRadius: 4, fontSize: 13, color: '#d1d5db' }}>
+          <span>Replying to <strong>{replyingTo.userLabel}</strong></span>
+          <button type="button" onClick={onCancelReply} style={{ background: 'transparent', border: 'none', color: '#9ca3af', cursor: 'pointer', fontSize: 16 }}>&times;</button>
+        </div>
+      ) : (
+        <label htmlFor="new-comment">Add a comment</label>
+      )}
       <textarea
         id="new-comment"
         className="tasks-input"

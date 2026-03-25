@@ -55,6 +55,7 @@ router.get(
           userId: c.user_id,
           commentText: c.comment_text,
           createdAt: c.created_at,
+          parentId: c.parent_id || null,
           user: {
             name: profile.name || "Unknown user",
             avatarUrl: profile.avatarUrl,
@@ -77,7 +78,7 @@ router.post(
   async (req, res) => {
     try {
       const { taskId } = req.params;
-      const { commentText } = req.body || {};
+      const { commentText, parentId } = req.body || {};
       const uid = req.user.uid;
 
       const trimmed = String(commentText ?? "").trim();
@@ -89,12 +90,17 @@ router.post(
       }
 
       const nowIso = new Date().toISOString();
-      const docRef = await adminDb.collection("task_comments").add({
+      const commentData = {
         task_id: taskId,
         user_id: uid,
         comment_text: trimmed,
         created_at: nowIso,
-      });
+      };
+      if (parentId) {
+        commentData.parent_id = parentId;
+      }
+
+      const docRef = await adminDb.collection("task_comments").add(commentData);
 
       return res.status(201).json({
         ok: true,
@@ -103,6 +109,7 @@ router.post(
         userId: uid,
         commentText: trimmed,
         createdAt: nowIso,
+        parentId: parentId || null,
       });
     } catch (e) {
       console.error("Create comment error:", e);

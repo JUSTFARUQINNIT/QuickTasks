@@ -23,10 +23,11 @@ export function TaskCommentsPage() {
 
   const [taskTitle, setTaskTitle] = useState<string>("Task comments");
   const [comments, setComments] = useState<
-    { id: string; userLabel: string; text: string; createdAt: string }[]
+    { id: string; userLabel: string; text: string; createdAt: string; parentId?: string; }[]
   >([]);
   const [newComment, setNewComment] = useState("");
   const [commentSaving, setCommentSaving] = useState(false);
+  const [replyingTo, setReplyingTo] = useState<{ id: string; userLabel: string } | null>(null);
 
   useEffect(() => {
     if (!taskId) return;
@@ -65,6 +66,7 @@ export function TaskCommentsPage() {
           user_id?: string;
           comment_text?: string;
           created_at?: string;
+          parent_id?: string;
         };
         let userLabel = data.user_id ?? "Unknown user";
         if (data.user_id) {
@@ -88,6 +90,7 @@ export function TaskCommentsPage() {
           userLabel,
           text: data.comment_text ?? "",
           createdAt: data.created_at ?? "",
+          parentId: data.parent_id ?? undefined,
         });
       }
 
@@ -118,7 +121,7 @@ export function TaskCommentsPage() {
             "Content-Type": "application/json",
             Authorization: `Bearer ${token}`,
           },
-          body: JSON.stringify({ commentText: trimmed }),
+          body: JSON.stringify({ commentText: trimmed, parentId: replyingTo?.id }),
         },
       );
       if (!res.ok) {
@@ -128,6 +131,7 @@ export function TaskCommentsPage() {
         throw new Error(body?.error ?? "Failed to add comment.");
       }
       setNewComment("");
+      setReplyingTo(null);
     } catch (err) {
       const msg =
         err instanceof Error ? err.message : "Could not add comment.";
@@ -156,13 +160,18 @@ export function TaskCommentsPage() {
         </div>
 
         <div className="task-details-comments-page">
-          <CommentList comments={comments} />
+          <CommentList 
+            comments={comments} 
+            onReply={(id, userLabel) => setReplyingTo({ id, userLabel })} 
+          />
           <div style={{ marginTop: 16 }}>
             <CommentInput
               value={newComment}
               onChange={setNewComment}
               onSubmit={handleAddComment}
               loading={commentSaving}
+              replyingTo={replyingTo}
+              onCancelReply={() => setReplyingTo(null)}
             />
           </div>
         </div>
