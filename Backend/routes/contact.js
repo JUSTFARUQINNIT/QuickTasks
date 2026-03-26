@@ -12,16 +12,16 @@ router.post("/", async (req, res) => {
 
     // Validate required fields
     if (!name || !email || !subject || !message) {
-      return res.status(400).json({ 
-        error: "Please fill in all required fields" 
+      return res.status(400).json({
+        error: "Please fill in all required fields",
       });
     }
 
     // Validate email format
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(email)) {
-      return res.status(400).json({ 
-        error: "Please provide a valid email address" 
+      return res.status(400).json({
+        error: "Please provide a valid email address",
       });
     }
 
@@ -30,7 +30,7 @@ router.post("/", async (req, res) => {
       <div style="font-family: 'Poppins', sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
         <div style="background: linear-gradient(135deg, #0b1120 0, #020617 45%, #000 100%); padding: 30px; border-radius: 16px; color: #e5e7eb;">
           <div style="text-align: center; margin-bottom: 30px;">
-            <img src=https://quick-tasks-ochre.vercel.app/quicktasks-logo.svg" alt="QuickTasks" style="width: 28px; height: 28px; margin-bottom: 10px;">
+            <img src="https://quick-tasks-ochre.vercel.app/quicktasks-logo.svg" alt="QuickTasks" style="width: 28px; height: 28px; margin-bottom: 10px;">
             <h1 style="color: #78d957; margin: 0; font-size: 24px; font-weight: 600;">QuickTasks</h1>
             <p style="margin: 5px 0 0; color: #9ca3af; font-size: 14px;">New Contact Form Submission</p>
           </div>
@@ -46,12 +46,16 @@ router.post("/", async (req, res) => {
                 <span style="color: #9ca3af; min-width: 80px; font-family: 'Poppins', sans-serif;">Email:</span>
                 <span style="color: #e5e7eb; font-weight: 500; font-family: 'Poppins', sans-serif;">${email}</span>
               </div>
-              ${company ? `
+              ${
+                company
+                  ? `
               <div style="display: flex; align-items: center; gap: 10px;">
                 <span style="color: #9ca3af; min-width: 80px; font-family: 'Poppins', sans-serif;">Company:</span>
                 <span style="color: #e5e7eb; font-weight: 500; font-family: 'Poppins', sans-serif;">${company}</span>
               </div>
-              ` : ''}
+              `
+                  : ""
+              }
               <div style="display: flex; align-items: center; gap: 10px;">
                 <span style="color: #9ca3af; min-width: 80px; font-family: 'Poppins', sans-serif;">Subject:</span>
                 <span style="color: #e5e7eb; font-weight: 500; font-family: 'Poppins', sans-serif;">${subject}</span>
@@ -138,35 +142,37 @@ router.post("/", async (req, res) => {
     await mailTransport.sendMail(confirmationMailOptions);
     console.log("✅ Confirmation email sent successfully!");
 
-    res.status(200).json({ 
+    res.status(200).json({
       success: true,
-      message: "Your message has been sent successfully! We'll get back to you within 24 hours."
+      message:
+        "Your message has been sent successfully! We'll get back to you within 24 hours.",
     });
-
   } catch (error) {
     console.error("❌ Error sending contact form email:", error);
-    
+
     // More detailed error message for debugging
     let errorMessage = "Failed to send message. Please try again later.";
-    
+
     if (error.message && error.message.includes("BREVO_API_KEY")) {
-      errorMessage = "Email service not configured properly. Please contact support.";
+      errorMessage =
+        "Email service not configured properly. Please contact support.";
     } else if (error.message && error.message.includes("No valid recipient")) {
       errorMessage = "Invalid email address provided.";
     }
-    
-    res.status(500).json({ 
+
+    res.status(500).json({
       error: errorMessage,
-      details: process.env.NODE_ENV === 'development' ? error.message : undefined
+      details:
+        process.env.NODE_ENV === "development" ? error.message : undefined,
     });
   }
 });
 
 // GET /api/contact - Health check endpoint
 router.get("/", (req, res) => {
-  res.json({ 
+  res.json({
     status: "Contact form API is running",
-    timestamp: new Date().toISOString()
+    timestamp: new Date().toISOString(),
   });
 });
 

@@ -24,7 +24,7 @@ export function LandingPage() {
     email: "",
     subject: "",
     message: "",
-    company: ""
+    company: "",
   });
   const [formSubmitting, setFormSubmitting] = useState(false);
   const [formMessage, setFormMessage] = useState("");
@@ -41,27 +41,34 @@ export function LandingPage() {
     setFormMessage("");
 
     try {
-      const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:8787'}/api/contact`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
+      const response = await fetch(
+        `${import.meta.env.VITE_API_URL || "http://localhost:8787"}/api/contact`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(contactForm),
         },
-        body: JSON.stringify(contactForm),
-      });
+      );
 
       const data = await response.json();
 
       if (response.ok) {
-        setFormMessage("✅ Message sent successfully! We'll get back to you within 24 hours.");
+        setFormMessage(
+          "✅ Message sent successfully! We'll get back to you within 24 hours.",
+        );
         setContactForm({
           name: "",
           email: "",
           subject: "",
           message: "",
-          company: ""
+          company: "",
         });
       } else {
-        setFormMessage(`❌ ${data.error || "Failed to send message. Please try again."}`);
+        setFormMessage(
+          `❌ ${data.error || "Failed to send message. Please try again."}`,
+        );
       }
     } catch (error) {
       console.error("Contact form error:", error);
@@ -71,10 +78,14 @@ export function LandingPage() {
     }
   };
 
-  const handleContactChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
+  const handleContactChange = (
+    e: React.ChangeEvent<
+      HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement
+    >,
+  ) => {
     setContactForm({
       ...contactForm,
-      [e.target.name]: e.target.value
+      [e.target.name]: e.target.value,
     });
   };
 
@@ -489,39 +500,39 @@ export function LandingPage() {
             </div>
             <div className="contact-form">
               <h3>Send us a Message</h3>
-              
+
               <form className="form" onSubmit={handleContactSubmit}>
                 <div className="form-group">
-                  <input 
-                    type="text" 
+                  <input
+                    type="text"
                     name="name"
-                    placeholder="Your Name" 
+                    placeholder="Your Name"
                     value={contactForm.name}
                     onChange={handleContactChange}
-                    required 
+                    required
                   />
                 </div>
                 <div className="form-group">
-                  <input 
-                    type="email" 
+                  <input
+                    type="email"
                     name="email"
-                    placeholder="Your Email" 
+                    placeholder="Your Email"
                     value={contactForm.email}
                     onChange={handleContactChange}
-                    required 
+                    required
                   />
                 </div>
                 <div className="form-group">
-                  <input 
-                    type="text" 
+                  <input
+                    type="text"
                     name="company"
-                    placeholder="Your Company (Optional)" 
+                    placeholder="Your Company (Optional)"
                     value={contactForm.company}
                     onChange={handleContactChange}
                   />
                 </div>
                 <div className="form-group">
-                  <select 
+                  <select
                     name="subject"
                     value={contactForm.subject}
                     onChange={handleContactChange}
@@ -545,19 +556,21 @@ export function LandingPage() {
                     required
                   ></textarea>
                 </div>
-                <button 
-                  type="submit" 
+                <button
+                  type="submit"
                   className="btn btn-primary btn-full"
                   disabled={formSubmitting}
                 >
                   {formSubmitting ? "Sending..." : "Send Message"}
                 </button>
-                
+
                 {formMessage && (
-                <div className={`form-message ${formMessage.includes("✅") ? "success" : "error"}`}>
-                  {formMessage}
-                </div>
-              )}
+                  <div
+                    className={`form-message ${formMessage.includes("✅") ? "success" : "error"}`}
+                  >
+                    {formMessage}
+                  </div>
+                )}
               </form>
             </div>
           </div>
