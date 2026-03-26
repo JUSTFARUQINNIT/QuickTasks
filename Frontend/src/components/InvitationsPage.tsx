@@ -322,10 +322,14 @@ export function InvitationsPage() {
 
       if (typeof window !== "undefined" && "Notification" in window) {
         if (Notification.permission === "granted") {
-          new Notification("Invitation accepted", {
-            body: `You’re now collaborating on “${invite.taskTitle}”.`,
-            icon: "/quicktasks-logo.svg",
-          });
+          try {
+            new Notification("Invitation accepted", {
+              body: `You're now collaborating on "${invite.taskTitle}".`,
+              icon: "/quicktasks-logo.svg",
+            });
+          } catch (error) {
+            console.warn("Failed to show notification:", error);
+          }
         }
       }
     } catch (err) {
@@ -351,10 +355,14 @@ export function InvitationsPage() {
 
       if (typeof window !== "undefined" && "Notification" in window) {
         if (Notification.permission === "granted") {
-          new Notification("Invitation declined", {
-            body: `You declined the invitation for “${invite.taskTitle}”.`,
-            icon: "/quicktasks-logo.svg",
-          });
+          try {
+            new Notification("Invitation declined", {
+              body: `You declined invitation for "${invite.taskTitle}".`,
+              icon: "/quicktasks-logo.svg",
+            });
+          } catch (error) {
+            console.warn("Failed to show notification:", error);
+          }
         }
       }
     } catch (err) {
